@@ -429,6 +429,27 @@ function ExoticPage() {
                     </Select>
                   </div>
                   <NumberField label="Barrière B" value={B} onChange={setB} step={1} />
+                  <div className="space-y-1.5">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Monitoring
+                    </Label>
+                    <Select value={barrierMonitoring} onValueChange={(v) => setBarrierMonitoring(v as "continuous" | "discrete")}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="continuous">Continu (Reiner-Rubinstein)</SelectItem>
+                        <SelectItem value="discrete">Discret (Broadie-Glasserman-Kou)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {barrierMonitoring === "discrete" && (
+                    <NumberField
+                      label="Pas de monitoring m"
+                      value={nMonitor}
+                      onChange={(v) => setNMonitor(Math.max(1, Math.round(v)))}
+                      step={1}
+                      suffix="obs"
+                    />
+                  )}
                 </>
               )}
               {family === "asian" && (
@@ -465,18 +486,38 @@ function ExoticPage() {
                 </>
               )}
               {family === "lookback" && (
-                <div className="space-y-1.5">
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Strike
-                  </Label>
-                  <Select value={lookbackKind} onValueChange={(v) => setLookbackKind(v as LookbackKind)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="fixed">Fixe</SelectItem>
-                      <SelectItem value="floating">Flottant</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Strike
+                    </Label>
+                    <Select value={lookbackKind} onValueChange={(v) => setLookbackKind(v as LookbackKind)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fixed">Fixe</SelectItem>
+                        <SelectItem value="floating">Flottant</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {((lookbackKind === "fixed" && type === "put") ||
+                    (lookbackKind === "floating" && type === "call")) && (
+                    <NumberField
+                      label="Min réalisé Sₘᵢₙ"
+                      value={Smin}
+                      onChange={setSmin}
+                      step={1}
+                    />
+                  )}
+                  {((lookbackKind === "fixed" && type === "call") ||
+                    (lookbackKind === "floating" && type === "put")) && (
+                    <NumberField
+                      label="Max réalisé Sₘₐₓ"
+                      value={Smax}
+                      onChange={setSmax}
+                      step={1}
+                    />
+                  )}
+                </>
               )}
 
               {method === "monte-carlo" && (
