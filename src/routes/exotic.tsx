@@ -323,15 +323,19 @@ function ExoticPage() {
     });
   }, [mcOutput, T, nSteps]);
 
-  // Closed-form availability note (arithmetic Asian uses Turnbull-Wakeman approximation)
+  // Closed-form availability note
   const cfNote =
-    family === "asian" && asianAvg === "arithmetic"
-      ? "Approximation Turnbull-Wakeman (matching de moments)."
+    family === "asian"
+      ? asianAvg === "arithmetic"
+        ? "Levy (1992) — moment-matching log-normal sur 2 moments exacts."
+        : "Kemna-Vorst (1990) — exact pour la moyenne géométrique."
       : family === "barrier"
-        ? "Formule Reiner-Rubinstein, monitoring continu."
+        ? barrierMonitoring === "continuous"
+          ? "Reiner-Rubinstein (1991), monitoring continu — exact."
+          : `Reiner-Rubinstein + correction Broadie-Glasserman-Kou (1997), m = ${nMonitor} obs.`
         : family === "lookback"
-          ? "Formule Goldman-Sosin-Gatto, monitoring continu, extrema = S₀."
-          : null;
+          ? "Goldman-Sosin-Gatto (1979) / Conze-Viswanathan (1991), monitoring continu."
+          : "Reiner-Rubinstein (1991) — exact.";
 
   // Pick which result to display in the grid
   const displayPrice =
