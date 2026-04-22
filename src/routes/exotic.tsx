@@ -72,10 +72,14 @@ function ExoticPage() {
   // Family-specific
   const [barrierKind, setBarrierKind] = useState<BarrierKind>("up-out");
   const [B, setB] = useState(120);
+  const [barrierMonitoring, setBarrierMonitoring] = useState<"continuous" | "discrete">("continuous");
+  const [nMonitor, setNMonitor] = useState(252);
   const [asianAvg, setAsianAvg] = useState<AsianAvg>("arithmetic");
   const [digitalKind, setDigitalKind] = useState<DigitalKind>("cash");
   const [cash, setCash] = useState(1);
   const [lookbackKind, setLookbackKind] = useState<LookbackKind>("fixed");
+  const [Smin, setSmin] = useState(100);
+  const [Smax, setSmax] = useState(100);
 
   // MC params
   const [nSims, setNSims] = useState(20000);
@@ -95,15 +99,18 @@ function ExoticPage() {
   const spec: ExoticSpec = useMemo(() => {
     switch (family) {
       case "barrier":
-        return { family, barrier: { kind: barrierKind, B } };
+        return {
+          family,
+          barrier: { kind: barrierKind, B, monitoring: barrierMonitoring, nMonitor },
+        };
       case "asian":
         return { family, asian: { avg: asianAvg } };
       case "digital":
         return { family, digital: { kind: digitalKind, cash } };
       case "lookback":
-        return { family, lookback: { kind: lookbackKind } };
+        return { family, lookback: { kind: lookbackKind, Smin, Smax } };
     }
-  }, [family, barrierKind, B, asianAvg, digitalKind, cash, lookbackKind]);
+  }, [family, barrierKind, B, barrierMonitoring, nMonitor, asianAvg, digitalKind, cash, lookbackKind, Smin, Smax]);
 
   // Closed-form result: recomputed live on every input change.
   const cfOutput = useMemo(() => {
@@ -316,15 +323,19 @@ function ExoticPage() {
     });
   }, [mcOutput, T, nSteps]);
 
-  // Closed-form availability note (arithmetic Asian uses Turnbull-Wakeman approximation)
+  // Closed-form availability note
   const cfNote =
-    family === "asian" && asianAvg === "arithmetic"
-      ? "Approximation Turnbull-Wakeman (matching de moments)."
+    family === "asian"
+      ? asianAvg === "arithmetic"
+        ? "Levy (1992) — moment-matching log-normal sur 2 moments exacts."
+        : "Kemna-Vorst (1990) — exact pour la moyenne géométrique."
       : family === "barrier"
-        ? "Formule Reiner-Rubinstein, monitoring continu."
+        ? barrierMonitoring === "continuous"
+          ? "Reiner-Rubinstein (1991), monitoring continu — exact."
+          : `Reiner-Rubinstein + correction Broadie-Glasserman-Kou (1997), m = ${nMonitor} obs.`
         : family === "lookback"
-          ? "Formule Goldman-Sosin-Gatto, monitoring continu, extrema = S₀."
-          : null;
+          ? "Goldman-Sosin-Gatto (1979) / Conze-Viswanathan (1991), monitoring continu."
+          : "Reiner-Rubinstein (1991) — exact.";
 
   // Pick which result to display in the grid
   const displayPrice =
@@ -422,6 +433,27 @@ function ExoticPage() {
                     </Select>
                   </div>
                   <NumberField label="Barrière B" value={B} onChange={setB} step={1} />
+                  <div className="space-y-1.5">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Monitoring
+                    </Label>
+                    <Select value={barrierMonitoring} onValueChange={(v) => setBarrierMonitoring(v as "continuous" | "discrete")}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="continuous">Continu (Reiner-Rubinstein)</SelectItem>
+                        <SelectItem value="discrete">Discret (Broadie-Glasserman-Kou)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {barrierMonitoring === "discrete" && (
+                    <NumberField
+                      label="Pas de monitoring m"
+                      value={nMonitor}
+                      onChange={(v) => setNMonitor(Math.max(1, Math.round(v)))}
+                      step={1}
+                      suffix="obs"
+                    />
+                  )}
                 </>
               )}
               {family === "asian" && (
@@ -458,18 +490,38 @@ function ExoticPage() {
                 </>
               )}
               {family === "lookback" && (
-                <div className="space-y-1.5">
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Strike
-                  </Label>
-                  <Select value={lookbackKind} onValueChange={(v) => setLookbackKind(v as LookbackKind)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="fixed">Fixe</SelectItem>
-                      <SelectItem value="floating">Flottant</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Strike
+                    </Label>
+                    <Select value={lookbackKind} onValueChange={(v) => setLookbackKind(v as LookbackKind)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fixed">Fixe</SelectItem>
+                        <SelectItem value="floating">Flottant</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {((lookbackKind === "fixed" && type === "put") ||
+                    (lookbackKind === "floating" && type === "call")) && (
+                    <NumberField
+                      label="Min réalisé Sₘᵢₙ"
+                      value={Smin}
+                      onChange={setSmin}
+                      step={1}
+                    />
+                  )}
+                  {((lookbackKind === "fixed" && type === "call") ||
+                    (lookbackKind === "floating" && type === "put")) && (
+                    <NumberField
+                      label="Max réalisé Sₘₐₓ"
+                      value={Smax}
+                      onChange={setSmax}
+                      step={1}
+                    />
+                  )}
+                </>
               )}
 
               {method === "monte-carlo" && (
