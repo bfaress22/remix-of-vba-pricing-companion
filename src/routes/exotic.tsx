@@ -115,6 +115,43 @@ function ExoticPage() {
     }
   }, [method, spec, S, K, T, r, q, sigma, type]);
 
+  // P&L vs spot at several residual maturities (closed form only).
+  const pnlCurve = useMemo(() => {
+    if (method !== "closed-form" || !cfOutput) return [];
+    const premium = cfOutput.price;
+    const lo = Math.max(S * 0.5, 1e-3);
+    const hi = S * 1.5;
+    const n = 60;
+    const horizons: { key: string; T: number }[] = [
+      { key: "t0", T: T },
+      { key: "tMid", T: T / 2 },
+      { key: "tEnd", T: Math.max(T * 0.01, 1e-4) },
+    ];
+    const rows: Record<string, number>[] = [];
+    for (let i = 0; i <= n; i++) {
+      const Si = lo + (hi - lo) * (i / n);
+      const row: Record<string, number> = { S: +Si.toFixed(2) };
+      for (const h of horizons) {
+        try {
+          const price = exoticClosedFormPrice(spec, {
+            S: Si,
+            K,
+            T: h.T,
+            r,
+            q,
+            sigma,
+            type,
+          });
+          row[h.key] = +(price - premium).toFixed(4);
+        } catch {
+          // skip
+        }
+      }
+      rows.push(row);
+    }
+    return rows;
+  }, [method, cfOutput, spec, S, K, T, r, q, sigma, type]);
+
   // Greeks-vs-spot curve (closed form only — MC would be too slow here).
   const greekCurve: GreekPoint[] = useMemo(() => {
     if (method !== "closed-form") return [];
@@ -391,6 +428,84 @@ function ExoticPage() {
               <GreeksChart data={greekCurve} spot={S} />
             )}
 
+            {method === "closed-form" && pnlCurve.length > 0 && (
+              <Card className="p-5">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  P&amp;L vs Spot
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Valeur de l'option − prime payée ({cfOutput?.price.toFixed(4)}), à différentes maturités résiduelles.
+                </p>
+                <div className="mt-4 h-[320px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={pnlCurve} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                      <XAxis
+                        dataKey="S"
+                        tick={{ fontSize: 11 }}
+                        stroke="var(--color-muted-foreground)"
+                        label={{ value: "Spot", position: "insideBottom", offset: -2, fontSize: 11 }}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 11 }}
+                        stroke="var(--color-muted-foreground)"
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "var(--color-popover)",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 8,
+                          fontSize: 12,
+                        }}
+                        formatter={(v: number) => v.toFixed(4)}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="t0"
+                        name={`T = ${T.toFixed(2)}`}
+                        stroke="var(--color-chart-1)"
+                        dot={false}
+                        strokeWidth={2}
+                        isAnimationActive={false}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="tMid"
+                        name={`T/2 = ${(T / 2).toFixed(2)}`}
+                        stroke="var(--color-chart-2)"
+                        dot={false}
+                        strokeWidth={2}
+                        isAnimationActive={false}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="tEnd"
+                        name="≈ Maturité"
+                        stroke="var(--color-chart-3)"
+                        dot={false}
+                        strokeWidth={2}
+                        isAnimationActive={false}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-3 rounded-sm" style={{ background: "var(--color-chart-1)" }} />
+                    T = {T.toFixed(2)}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-3 rounded-sm" style={{ background: "var(--color-chart-2)" }} />
+                    T/2
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-3 rounded-sm" style={{ background: "var(--color-chart-3)" }} />
+                    ≈ Maturité
+                  </span>
+                </div>
+              </Card>
+            )}
+
             {method === "monte-carlo" && (
               <Card className="p-5">
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -439,5 +554,3 @@ function ExoticPage() {
   );
 }
 
-// Avoid unused import warning when method is closed-form
-void exoticClosedFormPrice;
