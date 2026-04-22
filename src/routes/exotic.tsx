@@ -152,6 +152,54 @@ function ExoticPage() {
     return rows;
   }, [method, cfOutput, spec, S, K, T, r, q, sigma, type]);
 
+  // Whether payoff at maturity is a deterministic function of S_T only.
+  // Path-dependent families (barrier, asian, lookback) are NOT.
+  const isTerminalPayoff =
+    family === "digital" ||
+    (family === "lookback" && false); // lookback always path-dep
+  // For visualization we also expose vanilla-equivalent payoff for path-dep families
+  // but mark it as illustrative only.
+
+  const payoffCurve = useMemo(() => {
+    const premium = cfOutput?.price ?? 0;
+    const lo = Math.max(S * 0.4, 1e-3);
+    const hi = S * 1.6;
+    const n = 80;
+    const rows: { S: number; payoff: number; pnl: number }[] = [];
+    for (let i = 0; i <= n; i++) {
+      const ST = lo + (hi - lo) * (i / n);
+      let pay = 0;
+      switch (family) {
+        case "digital": {
+          const inMoney = type === "call" ? ST > K : ST < K;
+          if (inMoney) pay = digitalKind === "cash" ? cash : ST;
+          break;
+        }
+        case "barrier": {
+          // Illustrative: payoff IF the barrier condition allowed the option to be active.
+          pay = type === "call" ? Math.max(ST - K, 0) : Math.max(K - ST, 0);
+          break;
+        }
+        case "asian": {
+          // Illustrative vanilla on S_T (true payoff depends on the average).
+          pay = type === "call" ? Math.max(ST - K, 0) : Math.max(K - ST, 0);
+          break;
+        }
+        case "lookback": {
+          // Illustrative vanilla on S_T (true payoff depends on the path extremum).
+          pay = type === "call" ? Math.max(ST - K, 0) : Math.max(K - ST, 0);
+          break;
+        }
+      }
+      rows.push({
+        S: +ST.toFixed(2),
+        payoff: +pay.toFixed(4),
+        pnl: +(pay - premium).toFixed(4),
+      });
+    }
+    return rows;
+  }, [family, type, K, S, cfOutput, digitalKind, cash]);
+
   // Greeks-vs-spot curve (closed form only — MC would be too slow here).
   const greekCurve: GreekPoint[] = useMemo(() => {
     if (method !== "closed-form") return [];
