@@ -34,10 +34,10 @@ export interface MCParams {
 export interface ExoticSpec {
   family: ExoticType;
   // family-specific
-  barrier?: { kind: BarrierKind; B: number };
+  barrier?: { kind: BarrierKind; B: number; monitoring?: "continuous" | "discrete"; nMonitor?: number };
   asian?: { avg: AsianAvg };
   digital?: { kind: DigitalKind; cash: number }; // cash payout for cash-or-nothing
-  lookback?: { kind: LookbackKind };
+  lookback?: { kind: LookbackKind; Smin?: number; Smax?: number };
 }
 
 export interface MCResult {
