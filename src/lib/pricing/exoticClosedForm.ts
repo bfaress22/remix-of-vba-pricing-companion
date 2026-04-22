@@ -303,14 +303,16 @@ export function exoticClosedFormPrice(
         c.r,
         c.q,
         c.sigma,
+        spec.barrier!.monitoring ?? "continuous",
+        spec.barrier!.nMonitor ?? 252,
       );
     case "asian": {
-      // Only geometric has a closed form. Arithmetic uses Turnbull-Wakeman
-      // moment matching (approximation).
+      // Géométrique : Kemna-Vorst, exacte. Arithmétique : Levy (1992),
+      // moment-matching log-normal sur 2 moments exacts.
       if (spec.asian!.avg === "geometric") {
         return geometricAsianPrice(c.type, c.S, c.K, c.T, c.r, c.q, c.sigma);
       }
-      return turnbullWakemanArithmetic(c.type, c.S, c.K, c.T, c.r, c.q, c.sigma);
+      return levyArithmeticAsian(c.type, c.S, c.K, c.T, c.r, c.q, c.sigma);
     }
     case "digital":
       return digitalPrice(
@@ -334,12 +336,18 @@ export function exoticClosedFormPrice(
         c.r,
         c.q,
         c.sigma,
+        spec.lookback!.Smin,
+        spec.lookback!.Smax,
       );
   }
 }
 
-// Turnbull-Wakeman moment-matching approximation for arithmetic Asian
-function turnbullWakemanArithmetic(
+// Levy (1992) moment-matching log-normal pour Asian arithmétique.
+// Référence: Levy E. (1992), "Pricing European average rate currency
+// options", Journal of International Money and Finance 11, 474-491.
+// Hypothèse : moyenne continue de t=0 à T sur S(u). Pour une moyenne
+// future (forward-start), ajuster avec t1 > 0.
+function levyArithmeticAsian(
   type: OptionType,
   S: number,
   K: number,
@@ -349,28 +357,34 @@ function turnbullWakemanArithmetic(
   sigma: number,
 ): number {
   const b = r - q;
-  if (Math.abs(b) < 1e-8) {
-    // Limit case: use geometric approximation
+  if (Math.abs(b) < 1e-10) {
+    // b → 0 : la moyenne reste lognormale, traiter par géométrique exacte.
     return geometricAsianPrice(type, S, K, T, r, q, sigma);
   }
-  const M1 = (Math.exp(b * T) - 1) / (b * T);
+  const sig2 = sigma * sigma;
+  // Premier moment exact de l'intégrale (1/T) ∫₀ᵀ S(u) du :
+  // E[A] = S * (e^{bT} - 1) / (bT)
+  const M1 = (S * (Math.exp(b * T) - 1)) / (b * T);
+  // Second moment exact (Levy 1992, eq. 5) :
+  // E[A²] = 2 S² / ((b+σ²)(2b+σ²)T²) * [ (e^{(2b+σ²)T}-1)/(2b+σ²)
+  //         - (e^{bT}-1)/b * (b+σ²)/((b+σ²)) ... ]
+  // Forme compacte usuelle :
+  const M = (2 * S * S) / (b + sig2);
   const M2 =
-    (2 * Math.exp((2 * b + sigma * sigma) * T)) /
-      ((b + sigma * sigma) * (2 * b + sigma * sigma) * T * T) +
-    (2 / (b * T * T)) *
-      (1 / (2 * b + sigma * sigma) -
-        Math.exp(b * T) / (b + sigma * sigma));
-  const sigmaA = Math.sqrt(Math.log(M2) / T - 2 * b);
-  const FA = S * M1; // forward of average
-  // Use Black-76 style: price = e^{-rT} [FA N(d1) - K N(d2)]
-  const sqrtT = Math.sqrt(T);
-  const d1 = (Math.log(FA / K) + 0.5 * sigmaA * sigmaA * T) / (sigmaA * sqrtT);
-  const d2 = d1 - sigmaA * sqrtT;
+    (M / T / T) *
+    ((Math.exp((2 * b + sig2) * T) - 1) / (2 * b + sig2) -
+      (Math.exp(b * T) - 1) / b);
+  // Vol équivalente lognormale et moyenne lognormale :
+  // V = log(M2) - 2 log(M1),  d1 = (log(M1/K) + V/2)/√V
+  const V = Math.log(M2) - 2 * Math.log(M1);
+  const sqrtV = Math.sqrt(V);
+  const d1 = (Math.log(M1 / K) + 0.5 * V) / sqrtV;
+  const d2 = d1 - sqrtV;
   const disc = Math.exp(-r * T);
   if (type === "call") {
-    return disc * (FA * normCdf(d1) - K * normCdf(d2));
+    return disc * (M1 * normCdf(d1) - K * normCdf(d2));
   }
-  return disc * (K * normCdf(-d2) - FA * normCdf(-d1));
+  return disc * (K * normCdf(-d2) - M1 * normCdf(-d1));
 }
 
 // ---------- Greeks by central bumping on the closed-form price ----------
