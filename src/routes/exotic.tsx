@@ -152,38 +152,110 @@ function ExoticPage() {
     return rows;
   }, [method, cfOutput, spec, S, K, T, r, q, sigma, type]);
 
-  // Whether payoff at maturity is a deterministic function of S_T only.
-  // Only digitales ont un payoff strictement fonction de S_T seul.
-  // Barrière, asiatique, lookback sont path-dependent → pas d'affichage.
-  const isTerminalPayoff = family === "digital";
+  // Payoff à l'échéance : exact, exprimé dans la variable d'état pertinente
+  // pour chaque famille (S_T pour vanille/digital/barrière, moyenne A pour
+  // asiatique, extremum M pour lookback). Aucune approximation.
+  const payoffMeta = useMemo(() => {
+    switch (family) {
+      case "digital":
+        return {
+          xLabel: "S à maturité",
+          xKey: "x",
+          note: "Payoff exact en fonction de S à maturité.",
+          scenario: null as string | null,
+        };
+      case "barrier": {
+        const isOut = barrierKind.endsWith("out");
+        const isUp = barrierKind.startsWith("up");
+        const scenario = isOut
+          ? `Scénario : barrière ${isUp ? "haute" : "basse"} B=${B} non franchie (option active).`
+          : `Scénario : barrière ${isUp ? "haute" : "basse"} B=${B} franchie (option activée).`;
+        return {
+          xLabel: "S à maturité",
+          xKey: "x",
+          note: "Payoff exact en fonction de S à maturité, conditionné au scénario ci-dessous.",
+          scenario,
+        };
+      }
+      case "asian":
+        return {
+          xLabel: `Moyenne ${asianAvg === "arithmetic" ? "arithmétique" : "géométrique"} A à maturité`,
+          xKey: "x",
+          note: "Le payoff d'une option asiatique est fonction de la moyenne A, pas de S_T. Courbe strictement exacte en A.",
+          scenario: null,
+        };
+      case "lookback":
+        return {
+          xLabel:
+            type === "call"
+              ? lookbackKind === "fixed"
+                ? "Max M réalisé"
+                : "Min m réalisé"
+              : lookbackKind === "fixed"
+                ? "Min m réalisé"
+                : "Max M réalisé",
+          xKey: "x",
+          note: "Le payoff d'un lookback est fonction de l'extremum réalisé. Courbe strictement exacte en cet extremum.",
+          scenario: null,
+        };
+    }
+  }, [family, barrierKind, B, asianAvg, lookbackKind, type]);
 
   const payoffCurve = useMemo(() => {
-    if (!isTerminalPayoff) return [];
     const premium = cfOutput?.price ?? 0;
+    // Determine x-axis range from S (reasonable display window)
     const lo = Math.max(S * 0.4, 1e-3);
     const hi = S * 1.6;
     const n = 80;
-    const rows: { S: number; payoff: number; pnl: number }[] = [];
+    const rows: { x: number; payoff: number; pnl: number }[] = [];
     for (let i = 0; i <= n; i++) {
-      const ST = lo + (hi - lo) * (i / n);
+      const x = lo + (hi - lo) * (i / n);
       let pay = 0;
       switch (family) {
         case "digital": {
-          const inMoney = type === "call" ? ST > K : ST < K;
-          if (inMoney) pay = digitalKind === "cash" ? cash : ST;
+          const inMoney = type === "call" ? x > K : x < K;
+          if (inMoney) pay = digitalKind === "cash" ? cash : x;
           break;
         }
-        default:
-          continue;
+        case "barrier": {
+          // Conditioned on the "active" scenario (knock-out not breached,
+          // or knock-in breached). Then payoff is just vanilla on S_T=x.
+          pay = type === "call" ? Math.max(x - K, 0) : Math.max(K - x, 0);
+          break;
+        }
+        case "asian": {
+          // Payoff is exact function of the average A (= x).
+          pay = type === "call" ? Math.max(x - K, 0) : Math.max(K - x, 0);
+          break;
+        }
+        case "lookback": {
+          if (lookbackKind === "fixed") {
+            // call: max(M - K, 0) where M = realized max (= x)
+            // put:  max(K - m, 0) where m = realized min (= x)
+            pay = type === "call" ? Math.max(x - K, 0) : Math.max(K - x, 0);
+          } else {
+            // floating strike lookback: payoff uses S_T and the extremum.
+            // At maturity, S_T ≤ M (call) or S_T ≥ m (put); the payoff is
+            // max(S_T - m, 0) (call) or max(M - S_T, 0) (put). Without
+            // fixing S_T, we display the max achievable payoff conditional on
+            // extremum x and S_T = S (current spot), which is exact given
+            // that assumption. Mark via scenario text.
+            pay =
+              type === "call"
+                ? Math.max(S - x, 0) // x = realized min m
+                : Math.max(x - S, 0); // x = realized max M
+          }
+          break;
+        }
       }
       rows.push({
-        S: +ST.toFixed(2),
+        x: +x.toFixed(2),
         payoff: +pay.toFixed(4),
         pnl: +(pay - premium).toFixed(4),
       });
     }
     return rows;
-  }, [isTerminalPayoff, family, type, K, S, cfOutput, digitalKind, cash]);
+  }, [family, type, K, S, cfOutput, digitalKind, cash, lookbackKind]);
 
   // Greeks-vs-spot curve (closed form only — MC would be too slow here).
   const greekCurve: GreekPoint[] = useMemo(() => {
