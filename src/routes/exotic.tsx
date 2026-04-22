@@ -133,7 +133,7 @@ function ExoticPage() {
       const row: Record<string, number> = { S: +Si.toFixed(2) };
       for (const h of horizons) {
         try {
-          const res = exoticClosedFormPrice(spec, {
+          const price = exoticClosedFormPrice(spec, {
             S: Si,
             K,
             T: h.T,
@@ -142,7 +142,7 @@ function ExoticPage() {
             sigma,
             type,
           });
-          row[h.key] = +(res.price - premium).toFixed(4);
+          row[h.key] = +(price - premium).toFixed(4);
         } catch {
           // skip
         }
