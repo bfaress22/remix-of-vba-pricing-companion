@@ -72,10 +72,14 @@ function ExoticPage() {
   // Family-specific
   const [barrierKind, setBarrierKind] = useState<BarrierKind>("up-out");
   const [B, setB] = useState(120);
+  const [barrierMonitoring, setBarrierMonitoring] = useState<"continuous" | "discrete">("continuous");
+  const [nMonitor, setNMonitor] = useState(252);
   const [asianAvg, setAsianAvg] = useState<AsianAvg>("arithmetic");
   const [digitalKind, setDigitalKind] = useState<DigitalKind>("cash");
   const [cash, setCash] = useState(1);
   const [lookbackKind, setLookbackKind] = useState<LookbackKind>("fixed");
+  const [Smin, setSmin] = useState(100);
+  const [Smax, setSmax] = useState(100);
 
   // MC params
   const [nSims, setNSims] = useState(20000);
@@ -95,15 +99,18 @@ function ExoticPage() {
   const spec: ExoticSpec = useMemo(() => {
     switch (family) {
       case "barrier":
-        return { family, barrier: { kind: barrierKind, B } };
+        return {
+          family,
+          barrier: { kind: barrierKind, B, monitoring: barrierMonitoring, nMonitor },
+        };
       case "asian":
         return { family, asian: { avg: asianAvg } };
       case "digital":
         return { family, digital: { kind: digitalKind, cash } };
       case "lookback":
-        return { family, lookback: { kind: lookbackKind } };
+        return { family, lookback: { kind: lookbackKind, Smin, Smax } };
     }
-  }, [family, barrierKind, B, asianAvg, digitalKind, cash, lookbackKind]);
+  }, [family, barrierKind, B, barrierMonitoring, nMonitor, asianAvg, digitalKind, cash, lookbackKind, Smin, Smax]);
 
   // Closed-form result: recomputed live on every input change.
   const cfOutput = useMemo(() => {
