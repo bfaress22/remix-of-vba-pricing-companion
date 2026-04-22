@@ -4,6 +4,7 @@ import { Header } from "@/components/Header";
 import { Card } from "@/components/ui/card";
 import { NumberField } from "@/components/NumberField";
 import { GreeksGrid } from "@/components/GreeksGrid";
+import { GreeksChart, type GreekPoint } from "@/components/GreeksChart";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -33,18 +34,24 @@ import {
   type DigitalKind,
   type LookbackKind,
 } from "@/lib/pricing/monteCarlo";
+import {
+  exoticClosedFormGreeks,
+  exoticClosedFormPrice,
+} from "@/lib/pricing/exoticClosedForm";
 import type { OptionType } from "@/lib/pricing/blackScholes";
+
+type PricingMethod = "closed-form" | "monte-carlo";
 
 export const Route = createFileRoute("/exotic")({
   head: () => ({
     meta: [
-      { title: "Options exotiques — Monte Carlo | Quant Pricer" },
+      { title: "Options exotiques — Formules fermées & Monte Carlo | Quant Pricer" },
       {
         name: "description",
         content:
-          "Pricing Monte Carlo des options barrières, asiatiques, digitales et lookback. Prime, IC 95%, grecques par bumping.",
+          "Pricing d'options barrières, asiatiques, digitales et lookback par formules fermées (par défaut) ou Monte Carlo. Grecques et graphes.",
       },
-      { property: "og:title", content: "Options exotiques — Monte Carlo" },
+      { property: "og:title", content: "Options exotiques — CF & MC" },
       { property: "og:description", content: "Barrières, asiatiques, digitales, lookback." },
     ],
   }),
@@ -52,6 +59,7 @@ export const Route = createFileRoute("/exotic")({
 });
 
 function ExoticPage() {
+  const [method, setMethod] = useState<PricingMethod>("closed-form");
   const [family, setFamily] = useState<ExoticType>("barrier");
   const [type, setType] = useState<OptionType>("call");
   const [S, setS] = useState(100);
@@ -75,9 +83,8 @@ function ExoticPage() {
   const [seed, setSeed] = useState(42);
   const [antithetic, setAntithetic] = useState(true);
 
-  // We compute on demand to keep UX snappy.
   const [running, setRunning] = useState(false);
-  const [output, setOutput] = useState<null | {
+  const [mcOutput, setMcOutput] = useState<null | {
     price: number;
     stderr: number;
     ci95: [number, number];
@@ -98,7 +105,43 @@ function ExoticPage() {
     }
   }, [family, barrierKind, B, asianAvg, digitalKind, cash, lookbackKind]);
 
-  const run = () => {
+  // Closed-form result: recomputed live on every input change.
+  const cfOutput = useMemo(() => {
+    if (method !== "closed-form") return null;
+    try {
+      return exoticClosedFormGreeks(spec, { S, K, T, r, q, sigma, type });
+    } catch {
+      return null;
+    }
+  }, [method, spec, S, K, T, r, q, sigma, type]);
+
+  // Greeks-vs-spot curve (closed form only — MC would be too slow here).
+  const greekCurve: GreekPoint[] = useMemo(() => {
+    if (method !== "closed-form") return [];
+    const lo = Math.max(S * 0.5, 1e-3);
+    const hi = S * 1.5;
+    const n = 40;
+    const out: GreekPoint[] = [];
+    for (let i = 0; i <= n; i++) {
+      const Si = lo + (hi - lo) * (i / n);
+      try {
+        const g = exoticClosedFormGreeks(spec, { S: Si, K, T, r, q, sigma, type });
+        out.push({
+          S: +Si.toFixed(2),
+          delta: +g.delta.toFixed(6),
+          gamma: +g.gamma.toFixed(6),
+          vega: +g.vega.toFixed(6),
+          theta: +g.theta.toFixed(6),
+          rho: +g.rho.toFixed(6),
+        });
+      } catch {
+        // skip non-finite points
+      }
+    }
+    return out;
+  }, [method, spec, K, T, r, q, sigma, type, S]);
+
+  const runMC = () => {
     setRunning(true);
     setTimeout(() => {
       try {
@@ -106,7 +149,7 @@ function ExoticPage() {
         const mc = { nSims, nSteps, seed, antithetic };
         const grk = exoticGreeks(spec, common, mc);
         const sample = priceExoticMC(spec, common, mc, 15);
-        setOutput({
+        setMcOutput({
           price: grk.price,
           stderr: grk.stderr,
           ci95: grk.ci95,
@@ -120,16 +163,43 @@ function ExoticPage() {
   };
 
   const pathData = useMemo(() => {
-    if (!output) return [];
+    if (!mcOutput) return [];
     const dt = T / nSteps;
     return Array.from({ length: nSteps + 1 }, (_, i) => {
       const row: Record<string, number> = { t: +(i * dt).toFixed(3) };
-      output.paths.forEach((p, idx) => {
+      mcOutput.paths.forEach((p, idx) => {
         row[`p${idx}`] = +p[i].toFixed(2);
       });
       return row;
     });
-  }, [output, T, nSteps]);
+  }, [mcOutput, T, nSteps]);
+
+  // Closed-form availability note (arithmetic Asian uses Turnbull-Wakeman approximation)
+  const cfNote =
+    family === "asian" && asianAvg === "arithmetic"
+      ? "Approximation Turnbull-Wakeman (matching de moments)."
+      : family === "barrier"
+        ? "Formule Reiner-Rubinstein, monitoring continu."
+        : family === "lookback"
+          ? "Formule Goldman-Sosin-Gatto, monitoring continu, extrema = S₀."
+          : null;
+
+  // Pick which result to display in the grid
+  const displayPrice =
+    method === "closed-form" ? cfOutput?.price : mcOutput?.price;
+  const displayGreeks =
+    method === "closed-form"
+      ? cfOutput
+        ? {
+            delta: cfOutput.delta,
+            gamma: cfOutput.gamma,
+            vega: cfOutput.vega,
+            theta: cfOutput.theta,
+            rho: cfOutput.rho,
+          }
+        : null
+      : mcOutput?.greeks ?? null;
+  const displayCI = method === "monte-carlo" ? mcOutput?.ci95 : undefined;
 
   return (
     <div className="min-h-screen bg-background">
@@ -137,13 +207,26 @@ function ExoticPage() {
       <main className="container mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold tracking-tight">Options exotiques</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Pricing par simulation Monte Carlo sous dynamique GBM risque-neutre.
+          Formules fermées par défaut, Monte Carlo en option (GBM risque-neutre).
         </p>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[360px_1fr]">
           {/* Inputs */}
           <Card className="h-fit p-5 lg:sticky lg:top-20">
             <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Méthode de pricing
+                </Label>
+                <Select value={method} onValueChange={(v) => setMethod(v as PricingMethod)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="closed-form">Formule fermée (défaut)</SelectItem>
+                    <SelectItem value="monte-carlo">Monte Carlo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-1.5">
                 <Label className="text-xs uppercase tracking-wide text-muted-foreground">
                   Famille
@@ -247,94 +330,114 @@ function ExoticPage() {
                 </div>
               )}
 
-              <div className="space-y-3 border-t pt-4">
-                <Label className="text-xs font-semibold uppercase tracking-wide">
-                  Monte Carlo
-                </Label>
-                <NumberField label="Simulations" value={nSims} onChange={(v) => setNSims(Math.max(100, Math.round(v)))} step={1000} />
-                <NumberField label="Pas" value={nSteps} onChange={(v) => setNSteps(Math.max(1, Math.round(v)))} step={10} />
-                <NumberField label="Seed" value={seed} onChange={(v) => setSeed(Math.round(v))} step={1} />
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Antithétique
+              {method === "monte-carlo" && (
+                <div className="space-y-3 border-t pt-4">
+                  <Label className="text-xs font-semibold uppercase tracking-wide">
+                    Monte Carlo
                   </Label>
-                  <Switch checked={antithetic} onCheckedChange={setAntithetic} />
+                  <NumberField label="Simulations" value={nSims} onChange={(v) => setNSims(Math.max(100, Math.round(v)))} step={1000} />
+                  <NumberField label="Pas" value={nSteps} onChange={(v) => setNSteps(Math.max(1, Math.round(v)))} step={10} />
+                  <NumberField label="Seed" value={seed} onChange={(v) => setSeed(Math.round(v))} step={1} />
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Antithétique
+                    </Label>
+                    <Switch checked={antithetic} onCheckedChange={setAntithetic} />
+                  </div>
+                  <Button onClick={runMC} disabled={running} className="w-full">
+                    {running ? "Calcul…" : "Lancer la simulation"}
+                  </Button>
                 </div>
-              </div>
-
-              <Button onClick={run} disabled={running} className="w-full">
-                {running ? "Calcul…" : "Lancer la simulation"}
-              </Button>
+              )}
             </div>
           </Card>
 
           {/* Results */}
           <div className="space-y-6">
             <Card className="p-5">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Résultats
-              </h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  Résultats
+                </h2>
+                <span className="text-xs text-muted-foreground">
+                  {method === "closed-form" ? "Formule fermée" : "Monte Carlo"}
+                </span>
+              </div>
+              {cfNote && method === "closed-form" && (
+                <p className="mt-1 text-xs text-muted-foreground">{cfNote}</p>
+              )}
               <div className="mt-4">
-                {output ? (
+                {displayGreeks && displayPrice !== undefined ? (
                   <GreeksGrid
-                    price={output.price}
-                    delta={output.greeks.delta}
-                    gamma={output.greeks.gamma}
-                    vega={output.greeks.vega}
-                    theta={output.greeks.theta}
-                    rho={output.greeks.rho}
-                    ci={output.ci95}
+                    price={displayPrice}
+                    delta={displayGreeks.delta}
+                    gamma={displayGreeks.gamma}
+                    vega={displayGreeks.vega}
+                    theta={displayGreeks.theta}
+                    rho={displayGreeks.rho}
+                    ci={displayCI}
                   />
                 ) : (
                   <p className="py-8 text-center text-sm text-muted-foreground">
-                    Configurez les paramètres puis lancez la simulation.
+                    {method === "monte-carlo"
+                      ? "Configurez les paramètres puis lancez la simulation."
+                      : "Calcul en cours…"}
                   </p>
                 )}
               </div>
             </Card>
 
-            <Card className="p-5">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Trajectoires simulées (échantillon)
-              </h2>
-              <div className="mt-4 h-[340px]">
-                {output ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={pathData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                      <XAxis dataKey="t" tick={{ fontSize: 11 }} stroke="var(--color-muted-foreground)" />
-                      <YAxis tick={{ fontSize: 11 }} stroke="var(--color-muted-foreground)" />
-                      <Tooltip
-                        contentStyle={{
-                          background: "var(--color-popover)",
-                          border: "1px solid var(--color-border)",
-                          borderRadius: 8,
-                          fontSize: 12,
-                        }}
-                      />
-                      {output.paths.map((_, idx) => (
-                        <Line
-                          key={idx}
-                          type="monotone"
-                          dataKey={`p${idx}`}
-                          stroke={`var(--color-chart-${(idx % 5) + 1})`}
-                          dot={false}
-                          strokeWidth={1}
-                          strokeOpacity={0.7}
+            {method === "closed-form" && greekCurve.length > 0 && (
+              <GreeksChart data={greekCurve} spot={S} />
+            )}
+
+            {method === "monte-carlo" && (
+              <Card className="p-5">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  Trajectoires simulées (échantillon)
+                </h2>
+                <div className="mt-4 h-[340px]">
+                  {mcOutput ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={pathData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                        <XAxis dataKey="t" tick={{ fontSize: 11 }} stroke="var(--color-muted-foreground)" />
+                        <YAxis tick={{ fontSize: 11 }} stroke="var(--color-muted-foreground)" />
+                        <Tooltip
+                          contentStyle={{
+                            background: "var(--color-popover)",
+                            border: "1px solid var(--color-border)",
+                            borderRadius: 8,
+                            fontSize: 12,
+                          }}
                         />
-                      ))}
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                    Aucune simulation.
-                  </div>
-                )}
-              </div>
-            </Card>
+                        {mcOutput.paths.map((_, idx) => (
+                          <Line
+                            key={idx}
+                            type="monotone"
+                            dataKey={`p${idx}`}
+                            stroke={`var(--color-chart-${(idx % 5) + 1})`}
+                            dot={false}
+                            strokeWidth={1}
+                            strokeOpacity={0.7}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                      Aucune simulation.
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
           </div>
         </div>
       </main>
     </div>
   );
 }
+
+// Avoid unused import warning when method is closed-form
+void exoticClosedFormPrice;
