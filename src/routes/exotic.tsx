@@ -533,7 +533,7 @@ function ExoticPage() {
               <GreeksChart data={greekCurve} spot={S} />
             )}
 
-            {method === "closed-form" && isTerminalPayoff && payoffCurve.length > 0 && (
+            {method === "closed-form" && payoffCurve.length > 0 && (
               <Card className="p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -541,8 +541,18 @@ function ExoticPage() {
                       Payoff &amp; P&amp;L à l'échéance
                     </h2>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Payoff exact en fonction de S à maturité.
+                      {payoffMeta.note}
                     </p>
+                    {payoffMeta.scenario && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {payoffMeta.scenario}
+                      </p>
+                    )}
+                    {family === "lookback" && lookbackKind === "floating" && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Scénario : S à maturité = S₀ = {S}.
+                      </p>
+                    )}
                   </div>
                   <span className="shrink-0 rounded-md border border-border px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
                     Exact
@@ -553,10 +563,10 @@ function ExoticPage() {
                     <LineChart data={payoffCurve} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                       <XAxis
-                        dataKey="S"
+                        dataKey="x"
                         tick={{ fontSize: 11 }}
                         stroke="var(--color-muted-foreground)"
-                        label={{ value: "S à maturité", position: "insideBottom", offset: -2, fontSize: 11 }}
+                        label={{ value: payoffMeta.xLabel, position: "insideBottom", offset: -2, fontSize: 11 }}
                       />
                       <YAxis tick={{ fontSize: 11 }} stroke="var(--color-muted-foreground)" />
                       <Tooltip
