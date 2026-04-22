@@ -115,6 +115,43 @@ function ExoticPage() {
     }
   }, [method, spec, S, K, T, r, q, sigma, type]);
 
+  // P&L vs spot at several residual maturities (closed form only).
+  const pnlCurve = useMemo(() => {
+    if (method !== "closed-form" || !cfOutput) return [];
+    const premium = cfOutput.price;
+    const lo = Math.max(S * 0.5, 1e-3);
+    const hi = S * 1.5;
+    const n = 60;
+    const horizons: { key: string; T: number }[] = [
+      { key: "t0", T: T },
+      { key: "tMid", T: T / 2 },
+      { key: "tEnd", T: Math.max(T * 0.01, 1e-4) },
+    ];
+    const rows: Record<string, number>[] = [];
+    for (let i = 0; i <= n; i++) {
+      const Si = lo + (hi - lo) * (i / n);
+      const row: Record<string, number> = { S: +Si.toFixed(2) };
+      for (const h of horizons) {
+        try {
+          const res = exoticClosedFormPrice(spec, {
+            S: Si,
+            K,
+            T: h.T,
+            r,
+            q,
+            sigma,
+            type,
+          });
+          row[h.key] = +(res.price - premium).toFixed(4);
+        } catch {
+          // skip
+        }
+      }
+      rows.push(row);
+    }
+    return rows;
+  }, [method, cfOutput, spec, S, K, T, r, q, sigma, type]);
+
   // Greeks-vs-spot curve (closed form only — MC would be too slow here).
   const greekCurve: GreekPoint[] = useMemo(() => {
     if (method !== "closed-form") return [];
