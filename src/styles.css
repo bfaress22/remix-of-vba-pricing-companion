@@ -132,6 +132,52 @@
   --sidebar-ring: oklch(0.551 0.027 264.364);
 }
 
+/*
+ * Bloomberg Terminal theme — fond noir profond, texte orange ambre
+ * caractéristique, monospace. Applique sur <html> via la classe `bloomberg`.
+ */
+.bloomberg {
+  --background: oklch(0.08 0 0);
+  --foreground: oklch(0.85 0.17 70);
+  --card: oklch(0.12 0.005 60);
+  --card-foreground: oklch(0.88 0.17 70);
+  --popover: oklch(0.12 0.005 60);
+  --popover-foreground: oklch(0.88 0.17 70);
+  --primary: oklch(0.78 0.19 60);
+  --primary-foreground: oklch(0.08 0 0);
+  --secondary: oklch(0.18 0.01 60);
+  --secondary-foreground: oklch(0.85 0.17 70);
+  --muted: oklch(0.15 0.005 60);
+  --muted-foreground: oklch(0.62 0.1 70);
+  --accent: oklch(0.22 0.05 60);
+  --accent-foreground: oklch(0.9 0.18 70);
+  --destructive: oklch(0.65 0.25 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.3 0.05 60);
+  --input: oklch(0.18 0.01 60);
+  --ring: oklch(0.78 0.19 60);
+  /* Chart palette: amber, orange-red, cyan (quotes), green (up), magenta */
+  --chart-1: oklch(0.82 0.19 70);
+  --chart-2: oklch(0.72 0.22 30);
+  --chart-3: oklch(0.78 0.14 200);
+  --chart-4: oklch(0.78 0.22 140);
+  --chart-5: oklch(0.7 0.25 340);
+  --sidebar: oklch(0.1 0.005 60);
+  --sidebar-foreground: oklch(0.85 0.17 70);
+  --sidebar-primary: oklch(0.78 0.19 60);
+  --sidebar-primary-foreground: oklch(0.08 0 0);
+  --sidebar-accent: oklch(0.18 0.01 60);
+  --sidebar-accent-foreground: oklch(0.88 0.17 70);
+  --sidebar-border: oklch(0.3 0.05 60);
+  --sidebar-ring: oklch(0.78 0.19 60);
+}
+
+.bloomberg body,
+.bloomberg {
+  font-family: ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
+  letter-spacing: 0.01em;
+}
+
 @layer base {
   * {
     border-color: var(--color-border);
