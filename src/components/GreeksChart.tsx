@@ -45,62 +45,63 @@ const GREEK_LABELS: { key: GreekKey; label: string }[] = [
 ];
 
 export function GreeksChart({ data, spot, title = "Grecques vs Spot" }: Props) {
-  const greeks = useMemo(() => GREEK_LABELS, []);
+  const charts = useMemo(() => GREEK_LABELS, []);
   return (
     <Card className="p-5">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
         {title}
       </h2>
-      <div className="mt-4 h-[420px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 10, right: 16, bottom: 10, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-            <XAxis
-              dataKey="S"
-              tick={{ fontSize: 11 }}
-              stroke="var(--color-muted-foreground)"
-              label={{
-                value: "Spot",
-                position: "insideBottom",
-                offset: -2,
-                fontSize: 11,
-                fill: "var(--color-muted-foreground)",
-              }}
-            />
-            <YAxis
-              tick={{ fontSize: 11 }}
-              stroke="var(--color-muted-foreground)"
-              width={56}
-            />
-            <Tooltip
-              contentStyle={{
-                background: "var(--color-popover)",
-                border: "1px solid var(--color-border)",
-                borderRadius: 8,
-                fontSize: 11,
-              }}
-              formatter={(v: number, name: string) => [v.toFixed(4), name]}
-              labelFormatter={(l) => `S = ${Number(l).toFixed(2)}`}
-            />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            {greeks.map(({ key, label }) => (
-              <Line
-                key={key}
-                type="monotone"
-                dataKey={key}
-                name={label}
-                stroke={COLORS[key]}
-                dot={false}
-                strokeWidth={2}
-                isAnimationActive={false}
-              />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {charts.map(({ key, label }) => (
+          <div key={key} className="h-[180px]">
+            <div className="mb-1 flex items-center justify-between text-xs">
+              <span className="font-medium">{label}</span>
+              <span className="text-muted-foreground">vs S</span>
+            </div>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={data}
+                margin={{ top: 5, right: 8, bottom: 5, left: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                <XAxis
+                  dataKey="S"
+                  tick={{ fontSize: 10 }}
+                  stroke="var(--color-muted-foreground)"
+                />
+                <YAxis
+                  tick={{ fontSize: 10 }}
+                  stroke="var(--color-muted-foreground)"
+                  width={48}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--color-popover)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 8,
+                    fontSize: 11,
+                  }}
+                  formatter={(v: number) => v.toFixed(4)}
+                />
+                <Line
+                  type="monotone"
+                  dataKey={key}
+                  stroke={COLORS[key]}
+                  dot={false}
+                  strokeWidth={2}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ))}
       </div>
       <p className="mt-2 text-[11px] text-muted-foreground">
-        Spot courant : {spot.toFixed(2)} — toutes les grecques sont tracées sur la même échelle.
+        Spot courant : {spot.toFixed(2)}
       </p>
+      <span className="hidden">
+        <Legend />
+      </span>
     </Card>
   );
 }
