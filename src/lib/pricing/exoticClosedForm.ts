@@ -1,6 +1,21 @@
 // Closed-form pricers for exotic options under Black-Scholes-Merton dynamics.
-// Covers: barrier (continuous monitoring), geometric Asian, digital
-// (cash-or-nothing & asset-or-nothing) and continuous lookback options.
+//
+// References (same as Bloomberg OVME's analytic engines):
+//   - Vanilles : Black & Scholes (1973), Merton (1973) avec dividende q.
+//   - Barrière continue : Reiner & Rubinstein (1991), "Breaking down the
+//     barriers", Risk 4(8); cf. Haug, "Complete Guide to Option Pricing
+//     Formulas", 2e éd., chap. 4.17.
+//   - Barrière discrète : Broadie, Glasserman & Kou (1997), "A continuity
+//     correction for discrete barrier options", Math. Finance 7(4) — décale
+//     la barrière de B·exp(±β·σ·√(T/m)), β = -ζ(1/2)/√(2π) ≈ 0.5826.
+//   - Asiatique géométrique : Kemna & Vorst (1990), J. Banking & Finance.
+//   - Asiatique arithmétique : Levy (1992), "Pricing European average rate
+//     currency options", J. Int. Money & Finance 11 — moment-matching log-
+//     normal sur 2 moments exacts.
+//   - Digitales : Reiner & Rubinstein (1991), "Unscrambling the binary code".
+//   - Lookback continu : Goldman, Sosin & Gatto (1979), J. Finance 34(5);
+//     extension Conze & Viswanathan (1991) pour strike fixe et extrema déjà
+//     réalisés.
 
 import { normCdf, normPdf } from "./stats";
 import { blackScholes, type OptionType } from "./blackScholes";
@@ -23,17 +38,30 @@ export interface CFResult {
 }
 
 // ---------- Barrier (Reiner-Rubinstein, continuous monitoring) ----------
+// Broadie-Glasserman-Kou (1997) continuity correction constant.
+const BGK_BETA = 0.5825971579390106; // -zeta(1/2)/sqrt(2*pi)
+
 function barrierPrice(
   type: OptionType,
   kind: BarrierKind,
   S: number,
   K: number,
-  B: number,
+  Braw: number,
   T: number,
   r: number,
   q: number,
   sigma: number,
+  monitoring: "continuous" | "discrete" = "continuous",
+  nMonitor = 252,
 ): number {
+  // BGK continuity correction: shift B outward when monitored discretely.
+  // Up-barrier: B_eff = B * exp( +beta*sigma*sqrt(T/m))
+  // Down-barrier: B_eff = B * exp( -beta*sigma*sqrt(T/m))
+  let B = Braw;
+  if (monitoring === "discrete" && nMonitor > 0) {
+    const shift = BGK_BETA * sigma * Math.sqrt(T / nMonitor);
+    B = kind.startsWith("up") ? Braw * Math.exp(shift) : Braw * Math.exp(-shift);
+  }
   // Phi/eta sign conventions per Haug "Complete Guide to Option Pricing Formulas"
   const phi = type === "call" ? 1 : -1;
   const eta = kind.startsWith("down") ? 1 : -1;
@@ -68,10 +96,15 @@ function barrierPrice(
     phi * K * discR * Math.pow(B / S, 2 * mu) *
       normCdf(eta * y2 - eta * sigma * sqrtT);
 
-  // Knock-out check: if barrier already breached at t=0, price = 0
+  // Knock-out check : si la barrière est déjà franchie à t=0, prix = 0.
+  // En knock-in : si déjà franchie à t=0, le payoff est celui d'une vanille.
   if (isOut) {
     if (kind.startsWith("up") && S >= B) return 0;
     if (kind.startsWith("down") && S <= B) return 0;
+  }
+  if (isIn) {
+    if (kind.startsWith("up") && S >= B) return blackScholes({ type, S, K, T, r, q, sigma }).price;
+    if (kind.startsWith("down") && S <= B) return blackScholes({ type, S, K, T, r, q, sigma }).price;
   }
 
   let price = 0;
@@ -110,7 +143,8 @@ function barrierPrice(
   return Math.max(price, 0);
 }
 
-// ---------- Geometric Asian (Kemna-Vorst) ----------
+// ---------- Geometric Asian (Kemna-Vorst 1990) ----------
+// Volatilité ajustée σ_G = σ/√3, drift ajusté b_G = (r-q-σ²/6)/2.
 function geometricAsianPrice(
   type: OptionType,
   S: number,
@@ -155,7 +189,9 @@ function digitalPrice(
   return S * Math.exp(-q * T) * normCdf(sign * d1);
 }
 
-// ---------- Lookback (continuous monitoring, Goldman-Sosin-Gatto) ----------
+// ---------- Lookback (continuous monitoring, Goldman-Sosin-Gatto / Conze-Viswanathan) ----------
+// Avec extrema réalisés Smax (call fixe), Smin (put fixe) ou Smin/Smax (flottant).
+// Si non fournis, on suppose que l'option vient d'être émise (Smin = Smax = S).
 function lookbackPrice(
   type: OptionType,
   kind: LookbackKind,
@@ -165,15 +201,18 @@ function lookbackPrice(
   r: number,
   q: number,
   sigma: number,
+  Smin?: number,
+  Smax?: number,
 ): number {
   const b = r - q;
   const sqrtT = Math.sqrt(T);
   const sig2 = sigma * sigma;
 
   if (kind === "floating") {
-    // Floating strike: K replaced by min (call) or max (put). Assume Smin=Smax=S at t=0.
-    const M = S; // running extremum at inception
+    // Floating strike: payoff = (S_T - m) call, (M - S_T) put.
+    // Conze-Viswanathan : M = max réalisé, m = min réalisé.
     if (type === "call") {
+      const M = Smin ?? S; // running min for floating call
       const a1 =
         (Math.log(S / M) + (b + 0.5 * sig2) * T) / (sigma * sqrtT);
       const a2 = a1 - sigma * sqrtT;
@@ -188,6 +227,7 @@ function lookbackPrice(
             Math.exp(b * T) * normCdf(-a1));
       return term;
     } else {
+      const M = Smax ?? S; // running max for floating put
       const a1 =
         (Math.log(S / M) + (b + 0.5 * sig2) * T) / (sigma * sqrtT);
       const a2 = a1 - sigma * sqrtT;
@@ -203,9 +243,9 @@ function lookbackPrice(
       return term;
     }
   } else {
-    // Fixed strike lookback. Assume running extremum = S at inception.
+    // Fixed strike lookback. Use realized extremum if provided.
     if (type === "call") {
-      const M = S;
+      const M = Smax ?? S;
       const Kc = Math.max(K, M);
       const d1 =
         (Math.log(S / Kc) + (b + 0.5 * sig2) * T) / (sigma * sqrtT);
@@ -224,7 +264,7 @@ function lookbackPrice(
       if (K < M) price += (M - K) * Math.exp(-r * T);
       return price;
     } else {
-      const m = S;
+      const m = Smin ?? S;
       const Kp = Math.min(K, m);
       const d1 =
         (Math.log(S / Kp) + (b + 0.5 * sig2) * T) / (sigma * sqrtT);
