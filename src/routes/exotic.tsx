@@ -602,3 +602,81 @@ function ExoticPage() {
   );
 }
 
+            {method === "closed-form" && payoffCurve.length > 0 && (
+              <Card className="p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                      Payoff &amp; P&amp;L à l'échéance
+                    </h2>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {isTerminalPayoff
+                        ? "Payoff exact en fonction de S à maturité."
+                        : "⚠ Option path-dependent : le payoff réel dépend de toute la trajectoire (extrema, moyenne, franchissement de barrière). La courbe ci-dessous est une vanille équivalente sur S_T, fournie à titre illustratif uniquement."}
+                    </p>
+                  </div>
+                  <span
+                    className={
+                      isTerminalPayoff
+                        ? "shrink-0 rounded-md border border-border px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground"
+                        : "shrink-0 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400"
+                    }
+                  >
+                    {isTerminalPayoff ? "Exact" : "Illustratif"}
+                  </span>
+                </div>
+                <div className="mt-4 h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={payoffCurve} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                      <XAxis
+                        dataKey="S"
+                        tick={{ fontSize: 11 }}
+                        stroke="var(--color-muted-foreground)"
+                        label={{ value: "S à maturité", position: "insideBottom", offset: -2, fontSize: 11 }}
+                      />
+                      <YAxis tick={{ fontSize: 11 }} stroke="var(--color-muted-foreground)" />
+                      <Tooltip
+                        contentStyle={{
+                          background: "var(--color-popover)",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 8,
+                          fontSize: 12,
+                        }}
+                        formatter={(v: number) => v.toFixed(4)}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="payoff"
+                        name="Payoff"
+                        stroke="var(--color-chart-1)"
+                        dot={false}
+                        strokeWidth={2}
+                        isAnimationActive={false}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="pnl"
+                        name="P&L (payoff − prime)"
+                        stroke="var(--color-chart-4)"
+                        dot={false}
+                        strokeWidth={2}
+                        strokeDasharray="4 4"
+                        isAnimationActive={false}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-3 rounded-sm" style={{ background: "var(--color-chart-1)" }} />
+                    Payoff
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-3 rounded-sm" style={{ background: "var(--color-chart-4)" }} />
+                    P&amp;L (− prime {cfOutput?.price.toFixed(4) ?? "—"})
+                  </span>
+                </div>
+              </Card>
+            )}
+
