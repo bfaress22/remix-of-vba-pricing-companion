@@ -554,5 +554,3 @@ function ExoticPage() {
   );
 }
 
-// Avoid unused import warning when method is closed-form
-void exoticClosedFormPrice;
