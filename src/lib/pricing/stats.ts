@@ -97,10 +97,21 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
-// Box-Muller transform — returns one standard normal from two uniforms.
+// Box-Muller — version classique (cos seulement). Conservé pour compat
+// éventuelle ; préférer boxMullerPair qui exploite cos ET sin.
 export function boxMuller(u1: number, u2: number): number {
   const safe = Math.max(u1, 1e-12);
   return Math.sqrt(-2 * Math.log(safe)) * Math.cos(2 * Math.PI * u2);
+}
+
+// Box-Muller dual : retourne DEUX normales iid à partir de deux uniformes.
+// Ne gaspille pas la moitié de l'entropie (le sin est utilisé aussi).
+// Référence : Box & Muller (1958), Annals of Math. Statistics 29.
+export function boxMullerPair(u1: number, u2: number): [number, number] {
+  const safe = Math.max(u1, 1e-12);
+  const r = Math.sqrt(-2 * Math.log(safe));
+  const theta = 2 * Math.PI * u2;
+  return [r * Math.cos(theta), r * Math.sin(theta)];
 }
 
 export function mean(xs: number[]): number {

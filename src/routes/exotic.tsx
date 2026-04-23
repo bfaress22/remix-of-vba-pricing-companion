@@ -75,6 +75,7 @@ function ExoticPage() {
   const [barrierMonitoring, setBarrierMonitoring] = useState<"continuous" | "discrete">("continuous");
   const [nMonitor, setNMonitor] = useState(252);
   const [asianAvg, setAsianAvg] = useState<AsianAvg>("arithmetic");
+  const [asianFixings, setAsianFixings] = useState(0); // 0 = continu
   const [digitalKind, setDigitalKind] = useState<DigitalKind>("cash");
   const [cash, setCash] = useState(1);
   const [lookbackKind, setLookbackKind] = useState<LookbackKind>("fixed");
@@ -104,13 +105,19 @@ function ExoticPage() {
           barrier: { kind: barrierKind, B, monitoring: barrierMonitoring, nMonitor },
         };
       case "asian":
-        return { family, asian: { avg: asianAvg } };
+        return {
+          family,
+          asian: {
+            avg: asianAvg,
+            nFixings: asianFixings > 0 ? asianFixings : undefined,
+          },
+        };
       case "digital":
         return { family, digital: { kind: digitalKind, cash } };
       case "lookback":
         return { family, lookback: { kind: lookbackKind, Smin, Smax } };
     }
-  }, [family, barrierKind, B, barrierMonitoring, nMonitor, asianAvg, digitalKind, cash, lookbackKind, Smin, Smax]);
+  }, [family, barrierKind, B, barrierMonitoring, nMonitor, asianAvg, asianFixings, digitalKind, cash, lookbackKind, Smin, Smax]);
 
   // Closed-form result: recomputed live on every input change.
   const cfOutput = useMemo(() => {
@@ -457,18 +464,29 @@ function ExoticPage() {
                 </>
               )}
               {family === "asian" && (
-                <div className="space-y-1.5">
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Moyenne
-                  </Label>
-                  <Select value={asianAvg} onValueChange={(v) => setAsianAvg(v as AsianAvg)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="arithmetic">Arithmétique</SelectItem>
-                      <SelectItem value="geometric">Géométrique</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Moyenne
+                    </Label>
+                    <Select value={asianAvg} onValueChange={(v) => setAsianAvg(v as AsianAvg)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="arithmetic">Arithmétique</SelectItem>
+                        <SelectItem value="geometric">Géométrique</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {asianAvg === "arithmetic" && (
+                    <NumberField
+                      label="Fixings n (0 = continu)"
+                      value={asianFixings}
+                      onChange={(v) => setAsianFixings(Math.max(0, Math.round(v)))}
+                      step={1}
+                      suffix="obs"
+                    />
+                  )}
+                </>
               )}
               {family === "digital" && (
                 <>
