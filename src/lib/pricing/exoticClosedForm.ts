@@ -320,7 +320,16 @@ export function exoticClosedFormPrice(
       if (spec.asian!.avg === "geometric") {
         return geometricAsianPrice(c.type, c.S, c.K, c.T, c.r, c.q, c.sigma);
       }
-      return levyArithmeticAsian(c.type, c.S, c.K, c.T, c.r, c.q, c.sigma);
+      return levyArithmeticAsian(
+        c.type,
+        c.S,
+        c.K,
+        c.T,
+        c.r,
+        c.q,
+        c.sigma,
+        spec.asian!.nFixings,
+      );
     }
     case "digital":
       return digitalPrice(
@@ -353,8 +362,9 @@ export function exoticClosedFormPrice(
 // Levy (1992) moment-matching log-normal pour Asian arithmétique.
 // Référence: Levy E. (1992), "Pricing European average rate currency
 // options", Journal of International Money and Finance 11, 474-491.
-// Hypothèse : moyenne continue de t=0 à T sur S(u). Pour une moyenne
-// future (forward-start), ajuster avec t1 > 0.
+// Si nFixings est fourni, on calcule les moments EXACTS de la moyenne
+// arithmétique discrète A = (1/n) Σ S(t_i) sur n fixings équidistants
+// dans (0, T]. Sinon on utilise la moyenne continue (1/T)∫₀ᵀ S(u)du.
 function levyArithmeticAsian(
   type: OptionType,
   S: number,
@@ -363,27 +373,51 @@ function levyArithmeticAsian(
   r: number,
   q: number,
   sigma: number,
+  nFixings?: number,
 ): number {
   const b = r - q;
-  if (Math.abs(b) < 1e-10) {
-    // b → 0 : la moyenne reste lognormale, traiter par géométrique exacte.
-    return geometricAsianPrice(type, S, K, T, r, q, sigma);
-  }
   const sig2 = sigma * sigma;
-  // Premier moment exact de l'intégrale (1/T) ∫₀ᵀ S(u) du :
-  // E[A] = S * (e^{bT} - 1) / (bT)
-  const M1 = (S * (Math.exp(b * T) - 1)) / (b * T);
-  // Second moment exact (Levy 1992, eq. 5) :
-  // E[A²] = 2 S² / ((b+σ²)(2b+σ²)T²) * [ (e^{(2b+σ²)T}-1)/(2b+σ²)
-  //         - (e^{bT}-1)/b * (b+σ²)/((b+σ²)) ... ]
-  // Forme compacte usuelle :
-  const M = (2 * S * S) / (b + sig2);
-  const M2 =
-    (M / T / T) *
-    ((Math.exp((2 * b + sig2) * T) - 1) / (2 * b + sig2) -
-      (Math.exp(b * T) - 1) / b);
+
+  let M1: number;
+  let M2: number;
+
+  if (nFixings && nFixings >= 1) {
+    // Moments EXACTS de A = (1/n) Σ_{i=1..n} S(t_i), t_i = i·dt, dt = T/n.
+    // E[S(t_i)]    = S·exp(b·t_i)
+    // E[S(t_i)S(t_j)] = S²·exp(b·(t_i+t_j) + σ²·min(t_i,t_j))
+    const n = Math.floor(nFixings);
+    const dt = T / n;
+    let sum1 = 0;
+    let sum2 = 0;
+    for (let i = 1; i <= n; i++) {
+      const ti = i * dt;
+      sum1 += Math.exp(b * ti);
+      for (let j = 1; j <= n; j++) {
+        const tj = j * dt;
+        sum2 += Math.exp(b * (ti + tj) + sig2 * Math.min(ti, tj));
+      }
+    }
+    M1 = (S * sum1) / n;
+    M2 = (S * S * sum2) / (n * n);
+  } else {
+    // Moments EXACTS de A = (1/T)∫₀ᵀ S(u)du sous GBM risque-neutre.
+    // Référence : Levy (1992) éq. (5) ; cf. Haug 2e éd. §4.20.
+    // E[A]  = S·(e^{bT} − 1)/(bT)
+    // E[A²] = 2S²/T² · [ (e^{(2b+σ²)T} − 1) / ((2b+σ²)(b+σ²))
+    //                  − (e^{bT} − 1)       / (b·(b+σ²)) ]
+    if (Math.abs(b) < 1e-10) {
+      // b → 0 : la moyenne reste lognormale, traiter par géométrique exacte.
+      return geometricAsianPrice(type, S, K, T, r, q, sigma);
+    }
+    M1 = (S * (Math.exp(b * T) - 1)) / (b * T);
+    M2 =
+      ((2 * S * S) / (T * T)) *
+      ((Math.exp((2 * b + sig2) * T) - 1) / ((2 * b + sig2) * (b + sig2)) -
+        (Math.exp(b * T) - 1) / (b * (b + sig2)));
+  }
+
   // Vol équivalente lognormale et moyenne lognormale :
-  // V = log(M2) - 2 log(M1),  d1 = (log(M1/K) + V/2)/√V
+  // V = log(M2) − 2·log(M1),  d1 = (log(M1/K) + V/2)/√V
   const V = Math.log(M2) - 2 * Math.log(M1);
   const sqrtV = Math.sqrt(V);
   const d1 = (Math.log(M1 / K) + 0.5 * V) / sqrtV;
@@ -403,15 +437,34 @@ export function exoticClosedFormGreeks(
   const f = (cc: CommonInputs) => exoticClosedFormPrice(spec, cc);
   const price = f(c);
 
-  const dS = Math.max(c.S * 0.001, 1e-4);
-  const dSig = 1e-4;
-  const dR = 1e-5;
-  const dT = Math.min(c.T * 0.001, 1 / 365);
+  // Bumps standard industrie (cf. Glasserman 2004, §7.1) :
+  //   ΔS  = max(S·1%, 1e-4),    Δσ = 1e-2 (1 vol point),
+  //   Δr  = 1e-4   (1 bp),       ΔT = min(T·1%, 1/365)
+  // Tous central, sauf θ qui reste forward (T ne peut diminuer trop sans
+  // saturer T → 0). Les bumps sont assez grands pour dominer le bruit
+  // numérique (≈1e-12 sur Cody) tout en restant locaux.
+  const dS = Math.max(c.S * 0.01, 1e-4);
+  const dSig = 1e-2;
+  const dR = 1e-4;
+  const dT = Math.min(c.T * 0.01, 1 / 365);
 
-  const pUp = f({ ...c, S: c.S + dS });
-  const pDn = f({ ...c, S: c.S - dS });
-  const delta = (pUp - pDn) / (2 * dS);
-  const gamma = (pUp - 2 * price + pDn) / (dS * dS);
+  // Stabilisation barrière knock-in/out près de la barrière : si le bump
+  // de S traverse la barrière, on rétrécit dS pour rester d'un seul côté.
+  // Sans cela, gamma explose artificiellement par changement de régime
+  // (formule barrière → vanille dans la branche knock-in déjà touché).
+  let dSeff = dS;
+  if (spec.family === "barrier" && spec.barrier) {
+    const B = spec.barrier.B;
+    const dist = Math.abs(c.S - B);
+    if (dist > 1e-8 && dist < dS) {
+      dSeff = Math.max(dist * 0.5, 1e-6);
+    }
+  }
+
+  const pUp = f({ ...c, S: c.S + dSeff });
+  const pDn = f({ ...c, S: c.S - dSeff });
+  const delta = (pUp - pDn) / (2 * dSeff);
+  const gamma = (pUp - 2 * price + pDn) / (dSeff * dSeff);
 
   const vUp = f({ ...c, sigma: c.sigma + dSig });
   const vDn = f({ ...c, sigma: Math.max(c.sigma - dSig, 1e-6) });
@@ -421,8 +474,16 @@ export function exoticClosedFormGreeks(
   const rDn = f({ ...c, r: c.r - dR });
   const rho = (rUp - rDn) / (2 * dR);
 
-  const tDn = f({ ...c, T: Math.max(c.T - dT, 1e-6) });
-  const theta = ((tDn - price) / dT) * -1;
+  // Theta : différence centrale en T quand T ≫ dT, forward sinon.
+  let theta: number;
+  if (c.T > 2 * dT) {
+    const tUp = f({ ...c, T: c.T + dT });
+    const tDn = f({ ...c, T: c.T - dT });
+    theta = -(tUp - tDn) / (2 * dT);
+  } else {
+    const tDn = f({ ...c, T: Math.max(c.T - dT, 1e-6) });
+    theta = -(price - tDn) / dT;
+  }
 
   return { price, delta, gamma, vega, theta, rho };
 }

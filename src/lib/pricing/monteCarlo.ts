@@ -35,7 +35,7 @@ export interface ExoticSpec {
   family: ExoticType;
   // family-specific
   barrier?: { kind: BarrierKind; B: number; monitoring?: "continuous" | "discrete"; nMonitor?: number };
-  asian?: { avg: AsianAvg };
+  asian?: { avg: AsianAvg; nFixings?: number };
   digital?: { kind: DigitalKind; cash: number }; // cash payout for cash-or-nothing
   lookback?: { kind: LookbackKind; Smin?: number; Smax?: number };
 }
