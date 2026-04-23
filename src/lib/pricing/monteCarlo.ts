@@ -169,10 +169,29 @@ export function priceExoticMC(
     }
   }
 
-  const mu = mean(payoffs);
-  const sd = stddev(payoffs, mu);
+  // Estimateur correct de l'IC :
+  //  - sans antithetic : moyenne et écart-type sur N payoffs iid.
+  //  - avec antithetic : moyenne sur N PAIRES Y_i = (V(z_i)+V(-z_i))/2,
+  //    et écart-type sur ces Y_i (qui SONT iid). Le stderr naïf sur tous
+  //    les payoffs est biaisé car les paires sont corrélées négativement.
+  let mu: number;
+  let sd: number;
+  let nEff: number;
+  if (mc.antithetic) {
+    const pairs: number[] = [];
+    for (let k = 0; k < payoffs.length; k += 2) {
+      pairs.push(0.5 * (payoffs[k] + payoffs[k + 1]));
+    }
+    mu = mean(pairs);
+    sd = stddev(pairs, mu);
+    nEff = pairs.length;
+  } else {
+    mu = mean(payoffs);
+    sd = stddev(payoffs, mu);
+    nEff = payoffs.length;
+  }
   const price = disc * mu;
-  const stderr = (disc * sd) / Math.sqrt(payoffs.length);
+  const stderr = (disc * sd) / Math.sqrt(nEff);
   return {
     price,
     stderr,
