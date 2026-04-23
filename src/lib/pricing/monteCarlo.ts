@@ -1,6 +1,6 @@
 // Monte Carlo engine for exotic options under GBM dynamics.
 
-import { boxMuller, mean, mulberry32, stddev } from "./stats";
+import { boxMullerPair, mean, mulberry32, stddev } from "./stats";
 import type { OptionType } from "./blackScholes";
 
 export type ExoticType =
@@ -47,30 +47,40 @@ export interface MCResult {
   paths: number[][]; // sample of trajectories for display (small)
 }
 
-// Simulate one path of length nSteps+1 (including S0). Returns the path.
-function simulatePath(
+// Tire nSteps normales N(0,1) iid en utilisant Box-Muller en pairs
+// (cos ET sin de la même paire d'uniformes — pas de gaspillage).
+function drawNormals(rng: () => number, nSteps: number): Float64Array {
+  const z = new Float64Array(nSteps);
+  for (let i = 0; i < nSteps; i += 2) {
+    const [a, b] = boxMullerPair(rng(), rng());
+    z[i] = a;
+    if (i + 1 < nSteps) z[i + 1] = b;
+  }
+  return z;
+}
+
+// Construit le chemin à partir d'un vecteur de normales fixé. Permet le
+// VRAI antithetic en réutilisant les mêmes z avec signe opposé.
+function pathFromNormals(
   S0: number,
   r: number,
   q: number,
   sigma: number,
   T: number,
-  nSteps: number,
-  rng: () => number,
+  z: Float64Array,
   flipSign: boolean,
 ): number[] {
+  const nSteps = z.length;
   const dt = T / nSteps;
   const drift = (r - q - 0.5 * sigma * sigma) * dt;
   const vol = sigma * Math.sqrt(dt);
   const path = new Array<number>(nSteps + 1);
   path[0] = S0;
   let S = S0;
-  for (let i = 1; i <= nSteps; i++) {
-    const u1 = rng();
-    const u2 = rng();
-    let z = boxMuller(u1, u2);
-    if (flipSign) z = -z;
-    S = S * Math.exp(drift + vol * z);
-    path[i] = S;
+  for (let i = 0; i < nSteps; i++) {
+    const zi = flipSign ? -z[i] : z[i];
+    S = S * Math.exp(drift + vol * zi);
+    path[i + 1] = S;
   }
   return path;
 }
@@ -143,15 +153,17 @@ export function priceExoticMC(
   const N = mc.antithetic ? Math.ceil(mc.nSims / 2) : mc.nSims;
 
   for (let i = 0; i < N; i++) {
-    const p1 = simulatePath(common.S, common.r, common.q, common.sigma, common.T, mc.nSteps, rng, false);
+    // Tire un vecteur de normales iid. En antithetic on REUTILISE ce
+    // même vecteur avec signe opposé sur le second chemin — ce qui est
+    // la vraie technique d'antithétique (Glasserman 2004, §4.2) et
+    // garantit corr(p1,p2) ≤ 0 sur les payoffs monotones.
+    const z = drawNormals(rng, mc.nSteps);
+    const p1 = pathFromNormals(common.S, common.r, common.q, common.sigma, common.T, z, false);
     payoffs.push(payoff(spec, common, p1));
     if (sample.length < keepPaths) sample.push(p1);
 
     if (mc.antithetic) {
-      // Re-derive antithetic by flipping signs — but we already consumed RNG.
-      // Implement true antithetic: regenerate using same seed offset is complex;
-      // here we use a fresh independent path with flipped Z. Simpler approach:
-      const p2 = simulatePath(common.S, common.r, common.q, common.sigma, common.T, mc.nSteps, rng, true);
+      const p2 = pathFromNormals(common.S, common.r, common.q, common.sigma, common.T, z, true);
       payoffs.push(payoff(spec, common, p2));
       if (sample.length < keepPaths) sample.push(p2);
     }
