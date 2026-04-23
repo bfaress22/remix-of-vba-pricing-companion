@@ -208,38 +208,46 @@ function lookbackPrice(
   const sqrtT = Math.sqrt(T);
   const sig2 = sigma * sigma;
 
+  // Garde-fou b → 0 (cas r ≈ q, fréquent en FX).
+  // Goldman-Sosin-Gatto a une singularité en 1/b ; on la lève par la limite
+  // exacte (cf. Haug 2e éd., §4.16) qui remplace (σ²/(2b))·[(S/M)^{-2b/σ²}·N(...) − e^{bT}·N(...)]
+  // par la forme limite −σ·√T·[ n(a1) + a1·N(a1) − a1 ] (Hull/Conze).
+  // En pratique on régularise b à un epsilon signé : l'erreur résiduelle
+  // est O(b·T) ≪ bruit de marché, et la formule reste continue.
+  const bEff = Math.abs(b) < 1e-6 ? (b >= 0 ? 1e-6 : -1e-6) : b;
+
   if (kind === "floating") {
     // Floating strike: payoff = (S_T - m) call, (M - S_T) put.
-    // Conze-Viswanathan : M = max réalisé, m = min réalisé.
+    // Conze-Viswanathan : m = min réalisé (call), M = max réalisé (put).
     if (type === "call") {
       const M = Smin ?? S; // running min for floating call
       const a1 =
-        (Math.log(S / M) + (b + 0.5 * sig2) * T) / (sigma * sqrtT);
+        (Math.log(S / M) + (bEff + 0.5 * sig2) * T) / (sigma * sqrtT);
       const a2 = a1 - sigma * sqrtT;
       const term =
         S * Math.exp(-q * T) * normCdf(a1) -
         M * Math.exp(-r * T) * normCdf(a2) +
         S *
           Math.exp(-r * T) *
-          (sig2 / (2 * b)) *
-          (Math.pow(S / M, -2 * b / sig2) *
-            normCdf(-a1 + (2 * b * sqrtT) / sigma) -
-            Math.exp(b * T) * normCdf(-a1));
+          (sig2 / (2 * bEff)) *
+          (Math.pow(S / M, -2 * bEff / sig2) *
+            normCdf(-a1 + (2 * bEff * sqrtT) / sigma) -
+            Math.exp(bEff * T) * normCdf(-a1));
       return term;
     } else {
       const M = Smax ?? S; // running max for floating put
       const a1 =
-        (Math.log(S / M) + (b + 0.5 * sig2) * T) / (sigma * sqrtT);
+        (Math.log(S / M) + (bEff + 0.5 * sig2) * T) / (sigma * sqrtT);
       const a2 = a1 - sigma * sqrtT;
       const term =
         M * Math.exp(-r * T) * normCdf(-a2) -
         S * Math.exp(-q * T) * normCdf(-a1) +
         S *
           Math.exp(-r * T) *
-          (sig2 / (2 * b)) *
-          (-Math.pow(S / M, -2 * b / sig2) *
-            normCdf(a1 - (2 * b * sqrtT) / sigma) +
-            Math.exp(b * T) * normCdf(a1));
+          (sig2 / (2 * bEff)) *
+          (-Math.pow(S / M, -2 * bEff / sig2) *
+            normCdf(a1 - (2 * bEff * sqrtT) / sigma) +
+            Math.exp(bEff * T) * normCdf(a1));
       return term;
     }
   } else {
@@ -248,7 +256,7 @@ function lookbackPrice(
       const M = Smax ?? S;
       const Kc = Math.max(K, M);
       const d1 =
-        (Math.log(S / Kc) + (b + 0.5 * sig2) * T) / (sigma * sqrtT);
+        (Math.log(S / Kc) + (bEff + 0.5 * sig2) * T) / (sigma * sqrtT);
       const d2 = d1 - sigma * sqrtT;
       const part1 =
         S * Math.exp(-q * T) * normCdf(d1) -
@@ -256,10 +264,10 @@ function lookbackPrice(
       const part2 =
         S *
         Math.exp(-r * T) *
-        (sig2 / (2 * b)) *
-        (-Math.pow(S / Kc, -2 * b / sig2) *
-          normCdf(d1 - (2 * b * sqrtT) / sigma) +
-          Math.exp(b * T) * normCdf(d1));
+        (sig2 / (2 * bEff)) *
+        (-Math.pow(S / Kc, -2 * bEff / sig2) *
+          normCdf(d1 - (2 * bEff * sqrtT) / sigma) +
+          Math.exp(bEff * T) * normCdf(d1));
       let price = part1 + part2;
       if (K < M) price += (M - K) * Math.exp(-r * T);
       return price;
@@ -267,7 +275,7 @@ function lookbackPrice(
       const m = Smin ?? S;
       const Kp = Math.min(K, m);
       const d1 =
-        (Math.log(S / Kp) + (b + 0.5 * sig2) * T) / (sigma * sqrtT);
+        (Math.log(S / Kp) + (bEff + 0.5 * sig2) * T) / (sigma * sqrtT);
       const d2 = d1 - sigma * sqrtT;
       const part1 =
         Kp * Math.exp(-r * T) * normCdf(-d2) -
@@ -275,10 +283,10 @@ function lookbackPrice(
       const part2 =
         S *
         Math.exp(-r * T) *
-        (sig2 / (2 * b)) *
-        (Math.pow(S / Kp, -2 * b / sig2) *
-          normCdf(-d1 + (2 * b * sqrtT) / sigma) -
-          Math.exp(b * T) * normCdf(-d1));
+        (sig2 / (2 * bEff)) *
+        (Math.pow(S / Kp, -2 * bEff / sig2) *
+          normCdf(-d1 + (2 * bEff * sqrtT) / sigma) -
+          Math.exp(bEff * T) * normCdf(-d1));
       let price = part1 + part2;
       if (K > m) price += (K - m) * Math.exp(-r * T);
       return price;
