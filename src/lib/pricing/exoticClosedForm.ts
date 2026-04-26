@@ -25,7 +25,11 @@ import type {
   ExoticSpec,
   LookbackKind,
 } from "./monteCarlo";
-import { bosVandermarkAdjust, type DiscreteDividend } from "./discreteDividends";
+import {
+  bosVandermarkAdjust,
+  dividendsToContinuousYield,
+  type DiscreteDividend,
+} from "./discreteDividends";
 
 export interface CFResult {
   price: number;
@@ -514,7 +518,6 @@ export function exoticClosedFormPrice(
       cAdj = { ...c, S: Sstar, K: Kstar };
     } else {
       // Path-dependent: convert to continuous-yield equivalent.
-      const { dividendsToContinuousYield } = require("./discreteDividends") as typeof import("./discreteDividends");
       const qExtra = dividendsToContinuousYield(c.S, c.T, c.r, spec.dividends);
       cAdj = { ...c, q: c.q + qExtra };
     }
