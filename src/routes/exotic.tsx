@@ -74,19 +74,25 @@ function ExoticPage() {
   const [B, setB] = useState(120);
   const [barrierMonitoring, setBarrierMonitoring] = useState<"continuous" | "discrete">("continuous");
   const [nMonitor, setNMonitor] = useState(252);
+  const [rebate, setRebate] = useState(0);
   const [asianAvg, setAsianAvg] = useState<AsianAvg>("arithmetic");
   const [asianFixings, setAsianFixings] = useState(0); // 0 = continu
   const [digitalKind, setDigitalKind] = useState<DigitalKind>("cash");
   const [cash, setCash] = useState(1);
+  const [digitalMode, setDigitalMode] = useState<"bs" | "callspread">("bs");
   const [lookbackKind, setLookbackKind] = useState<LookbackKind>("fixed");
   const [Smin, setSmin] = useState(100);
   const [Smax, setSmax] = useState(100);
+  const [lookbackMonitoring, setLookbackMonitoring] = useState<"continuous" | "discrete">("continuous");
+  const [lookbackNMonitor, setLookbackNMonitor] = useState(252);
 
   // MC params
   const [nSims, setNSims] = useState(20000);
   const [nSteps, setNSteps] = useState(100);
   const [seed, setSeed] = useState(42);
   const [antithetic, setAntithetic] = useState(true);
+  const [rngMode, setRngMode] = useState<"pseudo" | "sobol">("sobol");
+  const [brownianBridge, setBrownianBridge] = useState(true);
 
   const [running, setRunning] = useState(false);
   const [mcOutput, setMcOutput] = useState<null | {
@@ -102,7 +108,7 @@ function ExoticPage() {
       case "barrier":
         return {
           family,
-          barrier: { kind: barrierKind, B, monitoring: barrierMonitoring, nMonitor },
+          barrier: { kind: barrierKind, B, monitoring: barrierMonitoring, nMonitor, rebate },
         };
       case "asian":
         return {
@@ -113,11 +119,20 @@ function ExoticPage() {
           },
         };
       case "digital":
-        return { family, digital: { kind: digitalKind, cash } };
+        return { family, digital: { kind: digitalKind, cash, mode: digitalMode } };
       case "lookback":
-        return { family, lookback: { kind: lookbackKind, Smin, Smax } };
+        return {
+          family,
+          lookback: {
+            kind: lookbackKind,
+            Smin,
+            Smax,
+            monitoring: lookbackMonitoring,
+            nMonitor: lookbackNMonitor,
+          },
+        };
     }
-  }, [family, barrierKind, B, barrierMonitoring, nMonitor, asianAvg, asianFixings, digitalKind, cash, lookbackKind, Smin, Smax]);
+  }, [family, barrierKind, B, barrierMonitoring, nMonitor, rebate, asianAvg, asianFixings, digitalKind, cash, digitalMode, lookbackKind, Smin, Smax, lookbackMonitoring, lookbackNMonitor]);
 
   // Closed-form result: recomputed live on every input change.
   const cfOutput = useMemo(() => {
@@ -302,7 +317,7 @@ function ExoticPage() {
     setTimeout(() => {
       try {
         const common = { S, K, T, r, q, sigma, type };
-        const mc = { nSims, nSteps, seed, antithetic };
+        const mc = { nSims, nSteps, seed, antithetic, rng: rngMode, brownianBridge };
         const grk = exoticGreeks(spec, common, mc);
         const sample = priceExoticMC(spec, common, mc, 15);
         setMcOutput({
@@ -440,6 +455,7 @@ function ExoticPage() {
                     </Select>
                   </div>
                   <NumberField label="Barrière B" value={B} onChange={setB} step={1} />
+                  <NumberField label="Rebate" value={rebate} onChange={setRebate} step={0.1} />
                   <div className="space-y-1.5">
                     <Label className="text-xs uppercase tracking-wide text-muted-foreground">
                       Monitoring
@@ -505,6 +521,18 @@ function ExoticPage() {
                   {digitalKind === "cash" && (
                     <NumberField label="Cash payout" value={cash} onChange={setCash} step={0.1} />
                   )}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Mode pricing
+                    </Label>
+                    <Select value={digitalMode} onValueChange={(v) => setDigitalMode(v as "bs" | "callspread")}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="bs">Black-Scholes pur</SelectItem>
+                        <SelectItem value="callspread">Call-spread (Bloomberg BinSmooth)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </>
               )}
               {family === "lookback" && (
@@ -539,6 +567,27 @@ function ExoticPage() {
                       step={1}
                     />
                   )}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Monitoring
+                    </Label>
+                    <Select value={lookbackMonitoring} onValueChange={(v) => setLookbackMonitoring(v as "continuous" | "discrete")}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="continuous">Continu (Goldman-Sosin-Gatto)</SelectItem>
+                        <SelectItem value="discrete">Discret (Broadie-Glasserman-Kou)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {lookbackMonitoring === "discrete" && (
+                    <NumberField
+                      label="Pas de monitoring m"
+                      value={lookbackNMonitor}
+                      onChange={(v) => setLookbackNMonitor(Math.max(1, Math.round(v)))}
+                      step={1}
+                      suffix="obs"
+                    />
+                  )}
                 </>
               )}
 
@@ -550,12 +599,32 @@ function ExoticPage() {
                   <NumberField label="Simulations" value={nSims} onChange={(v) => setNSims(Math.max(100, Math.round(v)))} step={1000} />
                   <NumberField label="Pas" value={nSteps} onChange={(v) => setNSteps(Math.max(1, Math.round(v)))} step={10} />
                   <NumberField label="Seed" value={seed} onChange={(v) => setSeed(Math.round(v))} step={1} />
+                  <div className="space-y-1.5">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Générateur
+                    </Label>
+                    <Select value={rngMode} onValueChange={(v) => setRngMode(v as "pseudo" | "sobol")}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sobol">Sobol (quasi-MC, Joe-Kuo)</SelectItem>
+                        <SelectItem value="pseudo">Pseudo-aléatoire (Mulberry32)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="flex items-center justify-between">
                     <Label className="text-xs uppercase tracking-wide text-muted-foreground">
                       Antithétique
                     </Label>
                     <Switch checked={antithetic} onCheckedChange={setAntithetic} />
                   </div>
+                  {family === "barrier" && (
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Brownian bridge
+                      </Label>
+                      <Switch checked={brownianBridge} onCheckedChange={setBrownianBridge} />
+                    </div>
+                  )}
                   <Button onClick={runMC} disabled={running} className="w-full">
                     {running ? "Calcul…" : "Lancer la simulation"}
                   </Button>
