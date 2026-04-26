@@ -74,19 +74,25 @@ function ExoticPage() {
   const [B, setB] = useState(120);
   const [barrierMonitoring, setBarrierMonitoring] = useState<"continuous" | "discrete">("continuous");
   const [nMonitor, setNMonitor] = useState(252);
+  const [rebate, setRebate] = useState(0);
   const [asianAvg, setAsianAvg] = useState<AsianAvg>("arithmetic");
   const [asianFixings, setAsianFixings] = useState(0); // 0 = continu
   const [digitalKind, setDigitalKind] = useState<DigitalKind>("cash");
   const [cash, setCash] = useState(1);
+  const [digitalMode, setDigitalMode] = useState<"bs" | "callspread">("bs");
   const [lookbackKind, setLookbackKind] = useState<LookbackKind>("fixed");
   const [Smin, setSmin] = useState(100);
   const [Smax, setSmax] = useState(100);
+  const [lookbackMonitoring, setLookbackMonitoring] = useState<"continuous" | "discrete">("continuous");
+  const [lookbackNMonitor, setLookbackNMonitor] = useState(252);
 
   // MC params
   const [nSims, setNSims] = useState(20000);
   const [nSteps, setNSteps] = useState(100);
   const [seed, setSeed] = useState(42);
   const [antithetic, setAntithetic] = useState(true);
+  const [rngMode, setRngMode] = useState<"pseudo" | "sobol">("sobol");
+  const [brownianBridge, setBrownianBridge] = useState(true);
 
   const [running, setRunning] = useState(false);
   const [mcOutput, setMcOutput] = useState<null | {
@@ -102,7 +108,7 @@ function ExoticPage() {
       case "barrier":
         return {
           family,
-          barrier: { kind: barrierKind, B, monitoring: barrierMonitoring, nMonitor },
+          barrier: { kind: barrierKind, B, monitoring: barrierMonitoring, nMonitor, rebate },
         };
       case "asian":
         return {
@@ -113,11 +119,20 @@ function ExoticPage() {
           },
         };
       case "digital":
-        return { family, digital: { kind: digitalKind, cash } };
+        return { family, digital: { kind: digitalKind, cash, mode: digitalMode } };
       case "lookback":
-        return { family, lookback: { kind: lookbackKind, Smin, Smax } };
+        return {
+          family,
+          lookback: {
+            kind: lookbackKind,
+            Smin,
+            Smax,
+            monitoring: lookbackMonitoring,
+            nMonitor: lookbackNMonitor,
+          },
+        };
     }
-  }, [family, barrierKind, B, barrierMonitoring, nMonitor, asianAvg, asianFixings, digitalKind, cash, lookbackKind, Smin, Smax]);
+  }, [family, barrierKind, B, barrierMonitoring, nMonitor, rebate, asianAvg, asianFixings, digitalKind, cash, digitalMode, lookbackKind, Smin, Smax, lookbackMonitoring, lookbackNMonitor]);
 
   // Closed-form result: recomputed live on every input change.
   const cfOutput = useMemo(() => {
@@ -302,7 +317,7 @@ function ExoticPage() {
     setTimeout(() => {
       try {
         const common = { S, K, T, r, q, sigma, type };
-        const mc = { nSims, nSteps, seed, antithetic };
+        const mc = { nSims, nSteps, seed, antithetic, rng: rngMode, brownianBridge };
         const grk = exoticGreeks(spec, common, mc);
         const sample = priceExoticMC(spec, common, mc, 15);
         setMcOutput({
