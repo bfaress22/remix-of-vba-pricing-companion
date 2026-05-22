@@ -612,17 +612,17 @@ function ExoticPage() {
                     </Select>
                   </div>
                   <div className="flex items-center justify-between">
-                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                    <Label htmlFor="mc-antithetic" className="text-xs uppercase tracking-wide text-muted-foreground">
                       Antithétique
                     </Label>
-                    <Switch checked={antithetic} onCheckedChange={setAntithetic} />
+                    <Switch id="mc-antithetic" aria-label="Antithétique" checked={antithetic} onCheckedChange={setAntithetic} />
                   </div>
                   {family === "barrier" && (
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                      <Label htmlFor="mc-brownian-bridge" className="text-xs uppercase tracking-wide text-muted-foreground">
                         Brownian bridge
                       </Label>
-                      <Switch checked={brownianBridge} onCheckedChange={setBrownianBridge} />
+                      <Switch id="mc-brownian-bridge" aria-label="Brownian bridge" checked={brownianBridge} onCheckedChange={setBrownianBridge} />
                     </div>
                   )}
                   <Button onClick={runMC} disabled={running} className="w-full">
