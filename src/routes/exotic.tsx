@@ -45,7 +45,7 @@ type PricingMethod = "closed-form" | "monte-carlo";
 export const Route = createFileRoute("/exotic")({
   head: () => ({
     meta: [
-      { title: "Options exotiques — Formules fermées & Monte Carlo | Quant Pricer" },
+      { title: "Options exotiques — CF & Monte Carlo | Quant Pricer" },
       {
         name: "description",
         content:
@@ -53,6 +53,26 @@ export const Route = createFileRoute("/exotic")({
       },
       { property: "og:title", content: "Options exotiques — CF & MC" },
       { property: "og:description", content: "Barrières, asiatiques, digitales, lookback." },
+      { property: "og:url", content: "https://pricers-pal-vba.lovable.app/exotic" },
+    ],
+    links: [
+      { rel: "canonical", href: "https://pricers-pal-vba.lovable.app/exotic" },
+    ],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          name: "Quant Pricer — Exotic options",
+          applicationCategory: "FinanceApplication",
+          operatingSystem: "Web",
+          description:
+            "Closed-form and Monte Carlo pricer for barrier, asian, digital and lookback options.",
+          url: "https://pricers-pal-vba.lovable.app/exotic",
+          offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+        }),
+      },
     ],
   }),
   component: ExoticPage,
