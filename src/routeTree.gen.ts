@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VanillaRouteImport } from './routes/vanilla'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as ExoticRouteImport } from './routes/exotic'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
@@ -17,6 +18,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const VanillaRoute = VanillaRouteImport.update({
   id: '/vanilla',
   path: '/vanilla',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExoticRoute = ExoticRouteImport.update({
@@ -39,12 +45,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/exotic': typeof ExoticRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/vanilla': typeof VanillaRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/exotic': typeof ExoticRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/vanilla': typeof VanillaRoute
 }
 export interface FileRoutesById {
@@ -52,20 +60,22 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/exotic': typeof ExoticRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/vanilla': typeof VanillaRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/exotic' | '/vanilla'
+  fullPaths: '/' | '/about' | '/exotic' | '/sitemap.xml' | '/vanilla'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/exotic' | '/vanilla'
-  id: '__root__' | '/' | '/about' | '/exotic' | '/vanilla'
+  to: '/' | '/about' | '/exotic' | '/sitemap.xml' | '/vanilla'
+  id: '__root__' | '/' | '/about' | '/exotic' | '/sitemap.xml' | '/vanilla'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   ExoticRoute: typeof ExoticRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   VanillaRoute: typeof VanillaRoute
 }
 
@@ -76,6 +86,13 @@ declare module '@tanstack/react-router' {
       path: '/vanilla'
       fullPath: '/vanilla'
       preLoaderRoute: typeof VanillaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/exotic': {
@@ -106,6 +123,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   ExoticRoute: ExoticRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   VanillaRoute: VanillaRoute,
 }
 export const routeTree = rootRouteImport

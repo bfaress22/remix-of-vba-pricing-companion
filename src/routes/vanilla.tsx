@@ -36,6 +36,26 @@ export const Route = createFileRoute("/vanilla")({
       },
       { property: "og:title", content: "Options vanilles — Black-Scholes" },
       { property: "og:description", content: "Prime, grecques et payoff en temps réel." },
+      { property: "og:url", content: "https://pricers-pal-vba.lovable.app/vanilla" },
+    ],
+    links: [
+      { rel: "canonical", href: "https://pricers-pal-vba.lovable.app/vanilla" },
+    ],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          name: "Quant Pricer — Vanilla options",
+          applicationCategory: "FinanceApplication",
+          operatingSystem: "Web",
+          description:
+            "Black-Scholes-Merton pricer for European calls and puts with analytical greeks.",
+          url: "https://pricers-pal-vba.lovable.app/vanilla",
+          offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+        }),
+      },
     ],
   }),
   component: VanillaPage,

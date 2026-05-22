@@ -1,0 +1,12 @@
+# Quant Pricer
+
+> Interactive web pricer for vanilla and exotic options. Black-Scholes-Merton closed-form, Reiner-Rubinstein barriers, Kemna-Vorst and Levy asians, Goldman-Sosin-Gatto lookbacks, plus Monte Carlo with Sobol quasi-random sequences and Brownian bridge.
+
+All computations run client-side in the browser — no data is stored. Methodology and references match Bloomberg OVME.
+
+## Pages
+
+- [Home](/): Overview and entry points to each pricer.
+- [Vanilla options](/vanilla): Black-Scholes-Merton pricer for European calls and puts, with analytical greeks, payoff and P&L charts.
+- [Exotic options](/exotic): Barriers, asians, digitals and lookbacks priced via closed-form formulas or Monte Carlo, with greeks and simulated paths.
+- [Methodology](/about): Models, assumptions, formulas and bibliographic references for every pricer.
