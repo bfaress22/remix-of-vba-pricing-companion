@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import {
   CartesianGrid,
   Line,
@@ -7,7 +6,6 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-  Legend,
   ReferenceLine,
 } from "recharts";
 import { Card } from "@/components/ui/card";
@@ -29,78 +27,55 @@ interface Props {
   title?: string;
 }
 
-const COLORS: Record<GreekKey, string> = {
-  delta: "var(--color-chart-1)",
-  gamma: "var(--color-chart-2)",
-  vega: "var(--color-chart-3)",
-  theta: "var(--color-chart-4)",
-  rho: "var(--color-chart-5)",
-};
-
-const GREEK_LABELS: { key: GreekKey; label: string }[] = [
-  { key: "delta", label: "Delta" },
-  { key: "gamma", label: "Gamma" },
-  { key: "vega", label: "Vega" },
-  { key: "theta", label: "Theta" },
-  { key: "rho", label: "Rho" },
+const GREEKS: { key: GreekKey; label: string; color: string; digits: number }[] = [
+  { key: "delta", label: "Delta", color: "var(--color-chart-1)", digits: 4 },
+  { key: "gamma", label: "Gamma", color: "var(--color-chart-2)", digits: 6 },
+  { key: "vega", label: "Vega", color: "var(--color-chart-3)", digits: 4 },
+  { key: "theta", label: "Theta", color: "var(--color-chart-4)", digits: 4 },
+  { key: "rho", label: "Rho", color: "var(--color-chart-5)", digits: 4 },
 ];
 
-export function GreeksChart({ data, spot, title = "Grecques vs Spot" }: Props) {
-  // Normalise chaque grecque par son max absolu pour les superposer sur une
-  // même échelle. La valeur brute reste dans le tooltip.
-  const { normalised, scales } = useMemo(() => {
-    const sc: Record<GreekKey, number> = {
-      delta: 0,
-      gamma: 0,
-      vega: 0,
-      theta: 0,
-      rho: 0,
-    };
-    for (const row of data) {
-      for (const { key } of GREEK_LABELS) {
-        const v = Math.abs(row[key]);
-        if (v > sc[key]) sc[key] = v;
-      }
-    }
-    const norm = data.map((row) => {
-      const r: Record<string, number> = { S: row.S };
-      for (const { key } of GREEK_LABELS) {
-        r[key] = sc[key] > 0 ? row[key] / sc[key] : 0;
-        r[`${key}_raw`] = row[key];
-      }
-      return r;
-    });
-    return { normalised: norm, scales: sc };
-  }, [data]);
-
+function MiniChart({
+  data,
+  spot,
+  gKey,
+  label,
+  color,
+  digits,
+}: {
+  data: GreekPoint[];
+  spot: number;
+  gKey: GreekKey;
+  label: string;
+  color: string;
+  digits: number;
+}) {
   return (
-    <Card className="p-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          {title}
-        </h2>
-        <span className="text-[11px] text-muted-foreground">
-          Valeurs normalisées (÷ max |·|)
+    <div className="rounded-lg border bg-card p-3">
+      <div className="flex items-baseline justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {label}
         </span>
+        <span className="font-mono text-[11px] text-muted-foreground">vs Spot</span>
       </div>
-      <div className="mt-4 h-[340px]">
+      <div className="mt-2 h-[180px]">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={normalised}
-            margin={{ top: 5, right: 10, bottom: 5, left: 0 }}
-          >
+          <LineChart data={data} margin={{ top: 5, right: 8, bottom: 5, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
             <XAxis
               dataKey="S"
-              tick={{ fontSize: 11 }}
+              tick={{ fontSize: 10 }}
               stroke="var(--color-muted-foreground)"
-              label={{ value: "Spot", position: "insideBottom", offset: -2, fontSize: 11 }}
             />
             <YAxis
-              tick={{ fontSize: 11 }}
+              tick={{ fontSize: 10 }}
               stroke="var(--color-muted-foreground)"
-              domain={[-1, 1]}
-              width={48}
+              width={56}
+              tickFormatter={(v: number) => {
+                const a = Math.abs(v);
+                if (a !== 0 && (a >= 1000 || a < 0.01)) return v.toExponential(1);
+                return v.toFixed(digits > 4 ? 4 : 2);
+              }}
             />
             <Tooltip
               contentStyle={{
@@ -109,11 +84,8 @@ export function GreeksChart({ data, spot, title = "Grecques vs Spot" }: Props) {
                 borderRadius: 8,
                 fontSize: 11,
               }}
-              formatter={(_v: number, name: string, item) => {
-                const payload = item?.payload as Record<string, number> | undefined;
-                const raw = payload?.[`${name}_raw`];
-                return [raw !== undefined ? raw.toFixed(4) : "—", name];
-              }}
+              formatter={(v: number) => [v.toFixed(digits), label]}
+              labelFormatter={(s: number) => `Spot ${Number(s).toFixed(2)}`}
             />
             <ReferenceLine
               x={spot}
@@ -121,36 +93,48 @@ export function GreeksChart({ data, spot, title = "Grecques vs Spot" }: Props) {
               strokeDasharray="3 3"
             />
             <ReferenceLine y={0} stroke="var(--color-border)" />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-            {GREEK_LABELS.map(({ key, label }) => (
-              <Line
-                key={key}
-                type="monotone"
-                dataKey={key}
-                name={label}
-                stroke={COLORS[key]}
-                dot={false}
-                strokeWidth={2}
-                isAnimationActive={false}
-              />
-            ))}
+            <Line
+              type="monotone"
+              dataKey={gKey}
+              stroke={color}
+              dot={false}
+              strokeWidth={2}
+              isAnimationActive={false}
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-muted-foreground sm:grid-cols-5">
-        {GREEK_LABELS.map(({ key, label }) => (
-          <div key={key} className="flex items-center gap-1">
-            <span
-              className="h-2 w-3 rounded-sm"
-              style={{ background: COLORS[key] }}
-            />
-            <span className="font-mono">{label}</span>
-            <span className="ml-auto">max |·| = {scales[key].toFixed(4)}</span>
-          </div>
+    </div>
+  );
+}
+
+export function GreeksChart({ data, spot, title = "Grecques vs Spot" }: Props) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          {title}
+        </h2>
+        <span className="text-[11px] text-muted-foreground">
+          Spot courant : {spot.toFixed(2)}
+        </span>
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {GREEKS.map((g) => (
+          <MiniChart
+            key={g.key}
+            data={data}
+            spot={spot}
+            gKey={g.key}
+            label={g.label}
+            color={g.color}
+            digits={g.digits}
+          />
         ))}
       </div>
-      <p className="mt-2 text-[11px] text-muted-foreground">
-        Spot courant : {spot.toFixed(2)}
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        Chaque grecque est tracée sur sa propre échelle (standard desks : pas de
+        normalisation, lecture directe des sensibilités).
       </p>
     </Card>
   );
