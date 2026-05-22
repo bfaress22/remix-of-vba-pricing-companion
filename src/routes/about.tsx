@@ -13,6 +13,25 @@ export const Route = createFileRoute("/about")({
       },
       { property: "og:title", content: "Méthodologie — Quant Pricer" },
       { property: "og:description", content: "Modèles analytiques alignés sur Bloomberg OVME." },
+      { property: "og:url", content: "https://pricers-pal-vba.lovable.app/about" },
+      { property: "og:type", content: "article" },
+    ],
+    links: [
+      { rel: "canonical", href: "https://pricers-pal-vba.lovable.app/about" },
+    ],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "TechArticle",
+          headline: "Quant Pricer — Méthodologie",
+          description:
+            "Formules de pricing : Black-Scholes-Merton, Reiner-Rubinstein, Broadie-Glasserman-Kou, Kemna-Vorst, Levy, Goldman-Sosin-Gatto.",
+          url: "https://pricers-pal-vba.lovable.app/about",
+          inLanguage: "fr",
+        }),
+      },
     ],
   }),
   component: AboutPage,
